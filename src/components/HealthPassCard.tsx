@@ -36,7 +36,7 @@ export function HealthPassCard({
     spo2,
     recommendation,
     timestamp,
-    issuer: "Rwanda Polytechnic — Smart Health Kiosk",
+    issuer: "University of Rwanda — Smart Health Kiosk",
   });
 
   const downloadPDF = useCallback(() => {

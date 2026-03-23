@@ -1,136 +1,272 @@
 # 📡 ESP32 Device Integration Guide
 
-> **How to connect IoT devices (ESP32) to the Smart Health Kiosk Dashboard**
+> **How to connect your IoT hardware to the Smart Health Kiosk Dashboard**
+
+---
+
+## Hardware Components
+
+| Component                        | Role                              |
+|----------------------------------|-----------------------------------|
+| **ESP32**                        | Main microcontroller (WiFi)       |
+| **MAX30205**                     | Body temperature sensor (I2C)     |
+| **MAX30102**                     | Heart rate + SpO₂ sensor (I2C)    |
+| **Ultrasonic Sensor (HC-SR04)**  | Presence/proximity detection      |
+| **Breadboard 830pt + Jumpers**   | Prototyping connections           |
 
 ---
 
 ## Architecture Overview
 
 ```
-┌──────────────┐        HTTPS POST        ┌──────────────────┐        Realtime        ┌──────────────┐
-│  ESP32 +     │  ───────────────────────► │  Supabase REST   │  ──────────────────►   │  Dashboard   │
-│  Sensors     │    (JSON over WiFi)       │  API (PostgreSQL)│    (WebSocket)         │  (React App) │
-└──────────────┘                           └──────────────────┘                        └──────────────┘
+                                 HTTPS POST
+┌─────────────────────┐        (JSON / WiFi)        ┌──────────────┐       Realtime        ┌──────────────┐
+│  ESP32              │  ──────────────────────────► │  Database    │  ───────────────────►  │  Dashboard   │
+│  ├─ MAX30205 (Temp) │                              │  REST API    │     (WebSocket)       │  (React App) │
+│  ├─ MAX30102 (HR/O₂)│                              └──────────────┘                       └──────────────┘
+│  └─ Ultrasonic (Det)│
+└─────────────────────┘
 ```
 
-- **ESP32** reads sensors and sends data via HTTP POST to the database REST API.
-- **Dashboard** subscribes to real-time changes and updates the UI automatically.
-- **No backend server needed** — devices talk directly to the database API.
+1. **Ultrasonic sensor** detects a person standing at the kiosk
+2. **MAX30205** reads body temperature via I2C
+3. **MAX30102** reads heart rate and SpO₂ via I2C
+4. **ESP32** evaluates health status, sends JSON to the REST API
+5. **Dashboard** receives real-time update and displays results
 
 ---
 
-## 1. Database Table Schema
+## Wiring Diagram
+
+```
+ESP32 Pin        Sensor              Pin
+──────────       ──────              ───
+3.3V  ─────────► MAX30205            VIN
+3.3V  ─────────► MAX30102            VIN
+5V    ─────────► Ultrasonic          VCC
+GND   ─────────► MAX30205            GND
+GND   ─────────► MAX30102            GND
+GND   ─────────► Ultrasonic          GND
+GPIO 21 (SDA) ─► MAX30205 SDA ──┐
+                  MAX30102 SDA ──┘   (shared I2C bus)
+GPIO 22 (SCL) ─► MAX30205 SCL ──┐
+                  MAX30102 SCL ──┘   (shared I2C bus)
+GPIO 12 ───────► Ultrasonic          TRIG
+GPIO 13 ◄─────── Ultrasonic          ECHO
+```
+
+> **Note:** MAX30205 and MAX30102 both use I2C and have different addresses, so they share the same SDA/SCL lines. No address conflict.
+>
+> - MAX30205 default I2C address: `0x48`
+> - MAX30102 default I2C address: `0x57`
+
+---
+
+## Required Arduino Libraries
+
+Install via **Arduino IDE → Library Manager**:
+
+| Library                         | For               | Author          |
+|---------------------------------|-------------------|-----------------|
+| `Protocentral MAX30205`         | Temperature       | Protocentral    |
+| `SparkFun MAX3010x`             | Heart rate + SpO₂ | SparkFun        |
+| `ArduinoJson`                   | JSON serialization| Benoit Blanchon |
+| `WiFi` (built-in)               | Network           | Espressif       |
+| `HTTPClient` (built-in)         | HTTP requests     | Espressif       |
+| `Wire` (built-in)               | I2C bus           | Arduino         |
+
+---
+
+## Database Schema
 
 The `vitals` table stores all readings:
 
-| Column          | Type        | Description                          |
-|-----------------|-------------|--------------------------------------|
-| `id`            | `uuid`      | Auto-generated primary key           |
-| `temperature`   | `float`     | Body temperature in °C               |
-| `heart_rate`    | `integer`   | Heart rate in bpm                    |
-| `spo2`          | `integer`   | Blood oxygen saturation in %         |
-| `status`        | `text`      | `SAFE`, `WARNING`, or `ALERT`        |
-| `recommendation`| `text`      | Human-readable health recommendation |
-| `created_at`    | `timestamp` | Auto-set to current time             |
+| Column          | Type        | Default                    | Description                        |
+|-----------------|-------------|----------------------------|------------------------------------|
+| `id`            | `uuid`      | auto-generated             | Primary key                        |
+| `temperature`   | `float`     | —                          | Body temperature in °C             |
+| `heart_rate`    | `integer`   | —                          | Heart rate in bpm                  |
+| `spo2`          | `integer`   | —                          | Blood oxygen saturation %          |
+| `status`        | `text`      | `'SAFE'`                   | `SAFE` / `WARNING` / `ALERT`      |
+| `recommendation`| `text`      | `'You are in good health'` | Health advice                      |
+| `created_at`    | `timestamp` | `now()`                    | Auto-set on insert                 |
 
 ---
 
-## 2. Health Status Logic
+## Health Status Logic
 
-The device (or the insert trigger) must evaluate the health status **before inserting**:
+Evaluate **on the ESP32 before sending**:
 
 ```
-IF temperature > 38°C  OR  spo2 < 94%  →  ALERT    → "Visit the clinic immediately"
-IF heart_rate > 100 bpm                 →  WARNING  → "Rest and monitor your condition"
-OTHERWISE                               →  SAFE     → "You are in good health"
+IF  temperature > 38.0°C  OR  spo2 < 94%   →  ALERT    →  "Visit the clinic immediately"
+IF  heart_rate > 100 bpm                    →  WARNING  →  "Rest and monitor your condition"
+OTHERWISE                                   →  SAFE     →  "You are in good health"
 ```
 
 ---
 
-## 3. ESP32 Arduino Code
-
-### Required Libraries
-
-Install these via Arduino Library Manager:
-
-- `WiFi.h` (built-in for ESP32)
-- `HTTPClient.h` (built-in for ESP32)
-- `ArduinoJson` (by Benoit Blanchon)
-
-### Full ESP32 Sketch
+## Full ESP32 Arduino Sketch
 
 ```cpp
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
+#include <Wire.h>
+#include "Protocentral_MAX30205.h"
+#include "MAX30105.h"
+#include "heartRate.h"
+#include "spo2_algorithm.h"
 
-// ============================================
+// =============================================
 // CONFIGURATION — UPDATE THESE VALUES
-// ============================================
+// =============================================
 const char* WIFI_SSID     = "YOUR_WIFI_SSID";
 const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
 
-// Supabase project credentials (found in your project settings)
 const char* SUPABASE_URL  = "https://<your-project-id>.supabase.co";
-const char* SUPABASE_KEY  = "<your-anon-key>";  // Use the anon/public key
+const char* SUPABASE_KEY  = "<your-anon-key>";
 
-// Sensor pins (adjust based on your wiring)
-const int TEMP_SENSOR_PIN = 34;   // e.g., MLX90614 or DS18B20
-const int PULSE_SENSOR_PIN = 35;  // e.g., MAX30102 or pulse sensor
-// SpO2 is typically read from the same MAX30102 module as heart rate
+// Ultrasonic sensor pins
+const int TRIG_PIN = 12;
+const int ECHO_PIN = 13;
 
-// Reading interval (milliseconds)
-const unsigned long READING_INTERVAL = 30000; // 30 seconds
+// Presence detection threshold (cm)
+const float PRESENCE_DISTANCE = 50.0;
 
-// ============================================
-// HEALTH EVALUATION (mirrors dashboard logic)
-// ============================================
+// Reading interval after detection (ms)
+const unsigned long READING_DELAY = 5000;
+
+// =============================================
+// SENSOR OBJECTS
+// =============================================
+MAX30205 tempSensor;
+MAX30105 particleSensor;
+
+// =============================================
+// HEALTH EVALUATION
+// =============================================
 struct HealthResult {
   String status;
   String recommendation;
 };
 
-HealthResult evaluateHealth(float temperature, int heartRate, int spo2) {
+HealthResult evaluateHealth(float temp, int hr, int spo2) {
   HealthResult result;
-
-  if (temperature > 38.0 || spo2 < 94) {
+  if (temp > 38.0 || spo2 < 94) {
     result.status = "ALERT";
     result.recommendation = "Visit the clinic immediately";
-  } else if (heartRate > 100) {
+  } else if (hr > 100) {
     result.status = "WARNING";
     result.recommendation = "Rest and monitor your condition";
   } else {
     result.status = "SAFE";
     result.recommendation = "You are in good health";
   }
+  return result;
+}
+
+// =============================================
+// ULTRASONIC — PRESENCE DETECTION
+// =============================================
+float getDistance() {
+  digitalWrite(TRIG_PIN, LOW);
+  delayMicroseconds(2);
+  digitalWrite(TRIG_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG_PIN, LOW);
+
+  long duration = pulseIn(ECHO_PIN, HIGH, 30000); // timeout 30ms
+  if (duration == 0) return 999.0;
+  return (duration * 0.0343) / 2.0; // cm
+}
+
+bool isPersonPresent() {
+  float dist = getDistance();
+  Serial.printf("  Ultrasonic distance: %.1f cm\n", dist);
+  return dist > 0 && dist < PRESENCE_DISTANCE;
+}
+
+// =============================================
+// READ TEMPERATURE (MAX30205)
+// =============================================
+float readTemperature() {
+  float temp = tempSensor.getTemperature();
+  Serial.printf("  MAX30205 Temp: %.2f °C\n", temp);
+  return temp;
+}
+
+// =============================================
+// READ HEART RATE & SPO2 (MAX30102)
+// =============================================
+struct PulseOxResult {
+  int heartRate;
+  int spo2;
+  bool valid;
+};
+
+PulseOxResult readPulseOx() {
+  PulseOxResult result = {0, 0, false};
+
+  const int BUFFER_LENGTH = 100;
+  uint32_t irBuffer[BUFFER_LENGTH];
+  uint32_t redBuffer[BUFFER_LENGTH];
+
+  // Collect samples
+  for (int i = 0; i < BUFFER_LENGTH; i++) {
+    while (!particleSensor.available())
+      particleSensor.check();
+
+    redBuffer[i] = particleSensor.getRed();
+    irBuffer[i] = particleSensor.getIR();
+    particleSensor.nextSample();
+  }
+
+  // Calculate HR and SpO2
+  int32_t spo2Val;
+  int8_t spo2Valid;
+  int32_t hrVal;
+  int8_t hrValid;
+
+  maxim_heart_rate_and_oxygen_saturation(
+    irBuffer, BUFFER_LENGTH,
+    redBuffer,
+    &spo2Val, &spo2Valid,
+    &hrVal, &hrValid
+  );
+
+  if (hrValid && spo2Valid) {
+    result.heartRate = hrVal;
+    result.spo2 = spo2Val;
+    result.valid = true;
+    Serial.printf("  MAX30102 HR: %d bpm | SpO2: %d%%\n", hrVal, spo2Val);
+  } else {
+    Serial.println("  MAX30102: Invalid reading — finger may not be placed correctly");
+  }
 
   return result;
 }
 
-// ============================================
-// SEND DATA TO SUPABASE
-// ============================================
+// =============================================
+// SEND DATA TO DATABASE
+// =============================================
 bool sendVitals(float temperature, int heartRate, int spo2) {
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("WiFi not connected!");
     return false;
   }
 
-  // Evaluate health status
   HealthResult health = evaluateHealth(temperature, heartRate, spo2);
 
-  // Build JSON payload
   JsonDocument doc;
-  doc["temperature"] = temperature;
-  doc["heart_rate"] = heartRate;
-  doc["spo2"] = spo2;
-  doc["status"] = health.status;
+  doc["temperature"] = round(temperature * 10.0) / 10.0; // 1 decimal
+  doc["heart_rate"]  = heartRate;
+  doc["spo2"]        = spo2;
+  doc["status"]      = health.status;
   doc["recommendation"] = health.recommendation;
 
   String jsonPayload;
   serializeJson(doc, jsonPayload);
 
-  // Send HTTP POST to Supabase REST API
   HTTPClient http;
   String url = String(SUPABASE_URL) + "/rest/v1/vitals";
 
@@ -143,63 +279,46 @@ bool sendVitals(float temperature, int heartRate, int spo2) {
   int httpCode = http.POST(jsonPayload);
 
   if (httpCode == 201) {
-    Serial.println("✅ Data sent successfully!");
-    Serial.println("   Status: " + health.status);
+    Serial.println("  ✅ Sent! Status: " + health.status);
   } else {
-    Serial.print("❌ Error sending data. HTTP code: ");
-    Serial.println(httpCode);
-    Serial.println(http.getString());
+    Serial.printf("  ❌ HTTP Error %d: %s\n", httpCode, http.getString().c_str());
   }
 
   http.end();
   return httpCode == 201;
 }
 
-// ============================================
-// READ SENSORS (replace with your actual sensor code)
-// ============================================
-float readTemperature() {
-  // Example: Replace with MLX90614 or DS18B20 library call
-  // For MLX90614:
-  //   #include <Adafruit_MLX90614.h>
-  //   Adafruit_MLX90614 mlx = Adafruit_MLX90614();
-  //   return mlx.readObjectTempC();
-
-  // Placeholder — returns simulated value
-  return 36.5 + (random(0, 30) / 10.0);
-}
-
-int readHeartRate() {
-  // Example: Replace with MAX30102 library call
-  // For MAX30105:
-  //   #include "MAX30105.h"
-  //   #include "heartRate.h"
-  //   (see SparkFun MAX3010x library examples)
-
-  // Placeholder — returns simulated value
-  return 70 + random(0, 40);
-}
-
-int readSpO2() {
-  // Example: Replace with MAX30102 SpO2 algorithm
-  // Usually read alongside heart rate from the same sensor
-
-  // Placeholder — returns simulated value
-  return 94 + random(0, 6);
-}
-
-// ============================================
-// SETUP & LOOP
-// ============================================
+// =============================================
+// SETUP
+// =============================================
 void setup() {
   Serial.begin(115200);
   delay(1000);
 
-  Serial.println("=================================");
-  Serial.println(" Smart Health Kiosk - ESP32");
-  Serial.println("=================================");
+  Serial.println("========================================");
+  Serial.println("  Smart Health Kiosk — ESP32 Controller");
+  Serial.println("========================================");
 
-  // Connect to WiFi
+  // Ultrasonic pins
+  pinMode(TRIG_PIN, OUTPUT);
+  pinMode(ECHO_PIN, INPUT);
+
+  // I2C init
+  Wire.begin(21, 22);
+
+  // MAX30205 init
+  tempSensor.begin();
+  Serial.println("✅ MAX30205 (Temperature) ready");
+
+  // MAX30102 init
+  if (particleSensor.begin(Wire, I2C_SPEED_FAST)) {
+    particleSensor.setup(60, 4, 2, 100, 411, 4096);
+    Serial.println("✅ MAX30102 (HR/SpO2) ready");
+  } else {
+    Serial.println("❌ MAX30102 not found! Check wiring.");
+  }
+
+  // WiFi connect
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   Serial.print("Connecting to WiFi");
 
@@ -211,41 +330,55 @@ void setup() {
   }
 
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\n✅ WiFi connected!");
-    Serial.print("   IP: ");
-    Serial.println(WiFi.localIP());
+    Serial.println("\n✅ WiFi connected! IP: " + WiFi.localIP().toString());
   } else {
-    Serial.println("\n❌ WiFi connection failed!");
+    Serial.println("\n❌ WiFi failed — will retry in loop");
   }
 }
 
+// =============================================
+// MAIN LOOP
+// =============================================
 void loop() {
-  // Read sensor values
+  Serial.println("\n--- Checking for presence ---");
+
+  if (!isPersonPresent()) {
+    Serial.println("  No person detected. Waiting...");
+    delay(2000);
+    return;
+  }
+
+  Serial.println("  👤 Person detected! Reading vitals...");
+  delay(READING_DELAY); // Allow user to place finger on MAX30102
+
+  // Read sensors
   float temperature = readTemperature();
-  int heartRate = readHeartRate();
-  int spo2 = readSpO2();
+  PulseOxResult pulseOx = readPulseOx();
 
-  // Print to serial monitor
-  Serial.println("--- New Reading ---");
-  Serial.printf("  Temp: %.1f°C | HR: %d bpm | SpO2: %d%%\n",
-                temperature, heartRate, spo2);
+  if (!pulseOx.valid) {
+    Serial.println("  ⚠️ Could not get valid HR/SpO2. Skipping.");
+    delay(3000);
+    return;
+  }
 
-  // Send to Supabase
-  sendVitals(temperature, heartRate, spo2);
+  // Send to database
+  Serial.println("  📡 Sending to dashboard...");
+  sendVitals(temperature, pulseOx.heartRate, pulseOx.spo2);
 
-  // Wait before next reading
-  delay(READING_INTERVAL);
+  // Cooldown before next reading
+  Serial.println("  ⏳ Cooldown 30s...");
+  delay(30000);
 }
 ```
 
 ---
 
-## 4. Testing with cURL
+## Testing Without Hardware
 
-You can test the API without an ESP32 using `curl`:
+### Using cURL
 
 ```bash
-# Insert a SAFE reading
+# SAFE reading
 curl -X POST "https://<your-project-id>.supabase.co/rest/v1/vitals" \
   -H "apikey: <your-anon-key>" \
   -H "Authorization: Bearer <your-anon-key>" \
@@ -259,7 +392,7 @@ curl -X POST "https://<your-project-id>.supabase.co/rest/v1/vitals" \
     "recommendation": "You are in good health"
   }'
 
-# Insert a WARNING reading
+# WARNING reading
 curl -X POST "https://<your-project-id>.supabase.co/rest/v1/vitals" \
   -H "apikey: <your-anon-key>" \
   -H "Authorization: Bearer <your-anon-key>" \
@@ -273,7 +406,7 @@ curl -X POST "https://<your-project-id>.supabase.co/rest/v1/vitals" \
     "recommendation": "Rest and monitor your condition"
   }'
 
-# Insert an ALERT reading
+# ALERT reading
 curl -X POST "https://<your-project-id>.supabase.co/rest/v1/vitals" \
   -H "apikey: <your-anon-key>" \
   -H "Authorization: Bearer <your-anon-key>" \
@@ -288,9 +421,7 @@ curl -X POST "https://<your-project-id>.supabase.co/rest/v1/vitals" \
   }'
 ```
 
----
-
-## 5. Testing with JavaScript (Browser / Node.js)
+### Using JavaScript
 
 ```javascript
 import { createClient } from "@supabase/supabase-js";
@@ -300,7 +431,6 @@ const supabase = createClient(
   "<your-anon-key>"
 );
 
-// Insert a reading
 const { error } = await supabase.from("vitals").insert({
   temperature: 36.8,
   heart_rate: 75,
@@ -310,67 +440,47 @@ const { error } = await supabase.from("vitals").insert({
 });
 
 if (error) console.error("Insert failed:", error);
-else console.log("Reading inserted successfully!");
+else console.log("Reading sent!");
 ```
 
 ---
 
-## 6. Recommended Sensors
+## Troubleshooting
 
-| Sensor       | Measures               | Interface | Library                    |
-|--------------|------------------------|-----------|----------------------------|
-| MLX90614     | Contactless temperature| I2C       | `Adafruit_MLX90614`        |
-| MAX30102     | Heart rate + SpO2      | I2C       | `SparkFun MAX3010x`        |
-| DS18B20      | Contact temperature    | OneWire   | `DallasTemperature`        |
-| Pulse Sensor | Heart rate (analog)    | Analog    | `PulseSensorPlayground`    |
+| Problem                          | Solution                                                    |
+|----------------------------------|-------------------------------------------------------------|
+| `401 Unauthorized`               | Verify the anon API key is correct                          |
+| `404 Not Found`                  | Table name must be exactly `vitals`                         |
+| MAX30102 not detected            | Check I2C wiring (SDA→21, SCL→22), ensure 3.3V power       |
+| MAX30205 reads 0 or garbage      | Confirm I2C address `0x48`, check solder joints             |
+| Ultrasonic reads 999             | Verify TRIG/ECHO pins, ensure 5V power                     |
+| Invalid HR/SpO2 readings         | User must place finger firmly on MAX30102 sensor window     |
+| Dashboard not updating           | Confirm realtime is enabled on the `vitals` table           |
+| WiFi won't connect               | ESP32 only supports **2.4GHz** networks                    |
 
-### Wiring Example (MAX30102 + MLX90614)
+---
+
+## Data Flow Summary
 
 ```
-ESP32           MAX30102        MLX90614
-─────           ────────        ────────
-3.3V  ────────► VIN      ────► VCC
-GND   ────────► GND      ────► GND
-GPIO 21 (SDA) ► SDA      ────► SDA
-GPIO 22 (SCL) ► SCL      ────► SCL
+1. Ultrasonic detects person → triggers reading
+2. MAX30205 reads temperature (I2C, address 0x48)
+3. MAX30102 reads heart rate + SpO₂ (I2C, address 0x57)
+4. ESP32 evaluates health status locally
+5. ESP32 sends HTTP POST (JSON) to REST API
+6. Database stores record in `vitals` table
+7. Realtime broadcasts INSERT to all connected clients
+8. Dashboard updates instantly with new reading
 ```
 
-> Both sensors use I2C and can share the same SDA/SCL lines.
+---
+
+## Security Notes
+
+- The **anon key** is a publishable key — safe to embed in firmware.
+- RLS policies allow public INSERT and SELECT on `vitals`.
+- For production, consider adding an Edge Function to validate device payloads.
 
 ---
 
-## 7. Troubleshooting
-
-| Problem                        | Solution                                                |
-|--------------------------------|---------------------------------------------------------|
-| `401 Unauthorized`             | Check your API key is correct and matches the anon key  |
-| `404 Not Found`                | Verify the table name is `vitals` (case-sensitive)      |
-| `400 Bad Request`              | Ensure JSON fields match the schema exactly              |
-| WiFi won't connect             | Check SSID/password, ensure 2.4GHz network              |
-| Data not appearing on dashboard| Check RLS policies allow INSERT; verify realtime is on  |
-| Readings are delayed           | Reduce `READING_INTERVAL` or check network latency      |
-
----
-
-## 8. Security Notes
-
-- The **anon key** is a public key — safe to embed in ESP32 firmware.
-- RLS (Row Level Security) policies on the `vitals` table allow:
-  - **Anyone** can `INSERT` (for IoT devices without auth)
-  - **Anyone** can `SELECT` (for the public dashboard)
-- For production: consider adding an Edge Function with API key validation for device authentication.
-
----
-
-## 9. Data Flow Summary
-
-1. **ESP32** reads temperature, heart rate, SpO2 from sensors
-2. **ESP32** evaluates health status using the same logic as the dashboard
-3. **ESP32** sends HTTP POST with JSON payload to the REST API
-4. **Database** stores the record in the `vitals` table
-5. **Realtime** broadcasts the new INSERT to all connected clients
-6. **Dashboard** receives the event and updates the UI instantly
-
----
-
-*For questions or support, refer to the project codebase or open an issue.*
+*Rwanda Polytechnic — Smart Health Kiosk Project*

@@ -61,7 +61,7 @@ const Dashboard = () => {
           <div className="absolute bottom-0 -left-20 w-56 h-56 rounded-full bg-primary-foreground/[0.04]" />
         </div>
         <div className="relative max-w-6xl mx-auto px-4 sm:px-6 py-10 md:py-14 flex items-center gap-6">
-          <img src={logo} alt="Contactless Sick-Bay logo" className="hidden sm:block h-24 md:h-28 w-auto drop-shadow-lg" />
+          <img src={logo} alt="Contactless Sick-Bay logo" className="hidden sm:block h-36 md:h-44 w-auto drop-shadow-lg" />
           <div>
             <p className="text-primary-foreground/50 text-[11px] font-semibold uppercase tracking-[0.2em] mb-2">
               University of Rwanda · IoT Project

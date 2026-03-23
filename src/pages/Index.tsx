@@ -95,57 +95,10 @@ const Dashboard = () => {
           </div>
         ) : (
           <>
-            {/* Row 1 — Three metric cards */}
-            <section className="grid grid-cols-1 sm:grid-cols-3 gap-4 animate-slide-up">
-              <DashboardCard
-                title="Temperature"
-                value={latest.temperature.toFixed(1)}
-                unit="°C"
-                icon={<Thermometer className="w-5 h-5" />}
-                variant="primary"
-              />
-              <DashboardCard
-                title="Heart Rate"
-                value={latest.heart_rate}
-                unit="bpm"
-                icon={<Heart className="w-5 h-5" />}
-                variant="destructive"
-              />
-              <DashboardCard
-                title="SpO₂"
-                value={latest.spo2}
-                unit="%"
-                icon={<Wind className="w-5 h-5" />}
-                variant="safe"
-              />
-            </section>
-
-            {/* Row 2 — Chart + Health Pass side by side */}
-            <section className="grid grid-cols-1 lg:grid-cols-5 gap-5">
-              {/* Chart (takes more space) */}
-              {records.length > 1 && (
-                <div className="lg:col-span-3 bg-card rounded-2xl border border-border shadow-card overflow-hidden animate-slide-up">
-                  <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-                    <div>
-                      <h2 className="font-display font-semibold text-sm text-foreground">Vitals Trend</h2>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
-                        Last {Math.min(records.length, 20)} readings
-                      </p>
-                    </div>
-                    <div className="hidden sm:flex items-center gap-3 text-[11px] text-muted-foreground">
-                      <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-primary" />Temp</span>
-                      <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-destructive" />HR</span>
-                      <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-status-safe" />SpO₂</span>
-                    </div>
-                  </div>
-                  <div className="p-4">
-                    <VitalsChart records={records} />
-                  </div>
-                </div>
-              )}
-
-              {/* Health Pass */}
-              <div className={records.length > 1 ? "lg:col-span-2" : "lg:col-span-5 max-w-sm mx-auto w-full"}>
+            {/* Row 1 — Health Pass + Metric cards side by side */}
+            <section className="grid grid-cols-1 lg:grid-cols-5 gap-5 animate-slide-up">
+              {/* Health Pass (left) */}
+              <div className="lg:col-span-2">
                 <HealthPassCard
                   status={latest.status as HealthStatus}
                   recommendation={latest.recommendation}
@@ -155,7 +108,54 @@ const Dashboard = () => {
                   timestamp={latest.created_at}
                 />
               </div>
+
+              {/* Metric cards (right, stacked) */}
+              <div className="lg:col-span-3 grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-1 gap-4">
+                <DashboardCard
+                  title="Temperature"
+                  value={latest.temperature.toFixed(1)}
+                  unit="°C"
+                  icon={<Thermometer className="w-5 h-5" />}
+                  variant="primary"
+                />
+                <DashboardCard
+                  title="Heart Rate"
+                  value={latest.heart_rate}
+                  unit="bpm"
+                  icon={<Heart className="w-5 h-5" />}
+                  variant="destructive"
+                />
+                <DashboardCard
+                  title="SpO₂"
+                  value={latest.spo2}
+                  unit="%"
+                  icon={<Wind className="w-5 h-5" />}
+                  variant="safe"
+                />
+              </div>
             </section>
+
+            {/* Row 2 — Chart */}
+            {records.length > 1 && (
+              <section className="bg-card rounded-2xl border border-border shadow-card overflow-hidden animate-slide-up">
+                <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+                  <div>
+                    <h2 className="font-display font-semibold text-sm text-foreground">Vitals Trend</h2>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Last {Math.min(records.length, 20)} readings
+                    </p>
+                  </div>
+                  <div className="hidden sm:flex items-center gap-3 text-[11px] text-muted-foreground">
+                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-primary" />Temp</span>
+                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-destructive" />HR</span>
+                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-status-safe" />SpO₂</span>
+                  </div>
+                </div>
+                <div className="p-4">
+                  <VitalsChart records={records} />
+                </div>
+              </section>
+            )}
 
             {/* Row 3 — History Table */}
             <section className="bg-card rounded-2xl border border-border shadow-card overflow-hidden animate-slide-up">

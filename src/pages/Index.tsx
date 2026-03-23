@@ -45,7 +45,7 @@ const Dashboard = () => {
         <div className="relative max-w-7xl mx-auto px-6 py-12 md:py-16">
           <div className="max-w-xl">
             <p className="text-primary-foreground/60 text-xs font-semibold uppercase tracking-[0.2em] mb-3">
-              Rwanda Polytechnic · IoT Project
+              University of Rwanda · IoT Project
             </p>
             <h1 className="text-3xl md:text-[2.75rem] font-display font-bold text-primary-foreground leading-[1.15]">
               Contactless Vital Signs Kiosk

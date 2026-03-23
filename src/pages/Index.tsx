@@ -1,4 +1,7 @@
-import { Thermometer, Heart, Wind, Activity, Shield, Clock, Download, QrCode } from "lucide-react";
+import { useEffect, useRef } from "react";
+import { Thermometer, Heart, Wind, Activity, Shield, Clock } from "lucide-react";
+import { jsPDF } from "jspdf";
+import { format } from "date-fns";
 import { DashboardCard } from "@/components/DashboardCard";
 import { StatusBadge } from "@/components/StatusBadge";
 import { HistoryTable } from "@/components/HistoryTable";
@@ -7,7 +10,128 @@ import { HealthPassCard } from "@/components/HealthPassCard";
 import { useVitals } from "@/hooks/useVitals";
 import type { HealthStatus } from "@/lib/healthLogic";
 
+/**
+ * When a phone scans the QR code, it opens the dashboard URL with ?download=1
+ * and the health pass data encoded in query params. This triggers auto-download.
+ */
+function useAutoDownloadFromQR() {
+  const triggered = useRef(false);
+
+  useEffect(() => {
+    if (triggered.current) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("download") !== "1") return;
+    triggered.current = true;
+
+    const status = (params.get("s") || "SAFE") as HealthStatus;
+    const temperature = parseFloat(params.get("t") || "36.5");
+    const heartRate = parseInt(params.get("hr") || "72", 10);
+    const spo2 = parseInt(params.get("o2") || "98", 10);
+    const recommendation = params.get("r") || "You are in good health";
+    const timestamp = params.get("ts") || new Date().toISOString();
+
+    const statusColors: Record<string, string> = {
+      SAFE: "#1a8a5c", WARNING: "#e6a200", ALERT: "#d62828",
+    };
+    const color = statusColors[status] || statusColors.SAFE;
+    const cr = parseInt(color.slice(1, 3), 16);
+    const cg = parseInt(color.slice(3, 5), 16);
+    const cb = parseInt(color.slice(5, 7), 16);
+
+    const doc = new jsPDF({ unit: "mm", format: [90, 140] });
+    const w = 90;
+
+    doc.setFillColor(250, 250, 252);
+    doc.rect(0, 0, w, 140, "F");
+    doc.setFillColor(cr, cg, cb);
+    doc.rect(0, 0, w, 4, "F");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.setTextColor(30, 36, 60);
+    doc.text("DIGITAL HEALTH PASS", w / 2, 14, { align: "center" });
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6);
+    doc.setTextColor(120, 130, 150);
+    doc.text("University of Rwanda · Smart Health Kiosk", w / 2, 19, { align: "center" });
+
+    doc.setFillColor(cr, cg, cb);
+    doc.roundedRect(w / 2 - 16, 24, 32, 10, 2, 2, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(255, 255, 255);
+    doc.text(status, w / 2, 30.5, { align: "center" });
+
+    doc.setDrawColor(230, 232, 240);
+    doc.line(10, 38, w - 10, 38);
+
+    const vitalsY = 44;
+    const col1 = 14;
+    const col2 = w / 2 + 2;
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(120, 130, 150);
+    doc.text("Temperature", col1, vitalsY);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.setTextColor(30, 36, 60);
+    doc.text(`${temperature.toFixed(1)}°C`, col1, vitalsY + 6);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(120, 130, 150);
+    doc.text("Heart Rate", col2, vitalsY);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.setTextColor(30, 36, 60);
+    doc.text(`${heartRate} bpm`, col2, vitalsY + 6);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(120, 130, 150);
+    doc.text("SpO2", col1, vitalsY + 16);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.setTextColor(30, 36, 60);
+    doc.text(`${spo2}%`, col1, vitalsY + 22);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(120, 130, 150);
+    doc.text("Date & Time", col2, vitalsY + 16);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(30, 36, 60);
+    doc.text(format(new Date(timestamp), "dd MMM yyyy, HH:mm"), col2, vitalsY + 22);
+
+    doc.setDrawColor(230, 232, 240);
+    doc.line(10, 74, w - 10, 74);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(cr, cg, cb);
+    doc.text(recommendation, w / 2, 80, { align: "center" });
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(5);
+    doc.setTextColor(160, 165, 180);
+    doc.text("University of Rwanda · Smart Health Kiosk", w / 2, 100, { align: "center" });
+
+    doc.setDrawColor(230, 232, 240);
+    doc.line(10, 106, w - 10, 106);
+    doc.setFontSize(5);
+    doc.text("This pass is auto-generated. Not a medical diagnosis.", w / 2, 112, { align: "center" });
+
+    doc.save(`health-pass-${format(new Date(timestamp), "yyyyMMdd-HHmm")}.pdf`);
+
+    // Clean the URL
+    window.history.replaceState({}, "", window.location.pathname);
+  }, []);
+}
+
 const Dashboard = () => {
+  useAutoDownloadFromQR();
   const { records, latest, loading } = useVitals();
 
   return (
@@ -45,7 +169,7 @@ const Dashboard = () => {
         <div className="relative max-w-7xl mx-auto px-6 py-12 md:py-16">
           <div className="max-w-xl">
             <p className="text-primary-foreground/60 text-xs font-semibold uppercase tracking-[0.2em] mb-3">
-              Rwanda Polytechnic · IoT Project
+              University of Rwanda · IoT Project
             </p>
             <h1 className="text-3xl md:text-[2.75rem] font-display font-bold text-primary-foreground leading-[1.15]">
               Contactless Vital Signs Kiosk
@@ -157,7 +281,7 @@ const Dashboard = () => {
       {/* Footer */}
       <footer className="border-t border-border bg-card/60">
         <div className="max-w-7xl mx-auto px-6 py-5 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-muted-foreground">
-          <span>© 2026 Smart Health Kiosk — Rwanda Polytechnic</span>
+          <span>© 2026 Smart Health Kiosk — University of Rwanda</span>
           <span>ESP32 · MAX30205 · MAX30102 · Ultrasonic</span>
         </div>
       </footer>

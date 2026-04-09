@@ -33,7 +33,7 @@ function useAutoDownloadFromQR() {
 
 const Dashboard = () => {
   useAutoDownloadFromQR();
-  const { records, latest, loading } = useVitals();
+  const { records, latest, loading, totalCount, page, setPage, totalPages, chartRecords } = useVitals();
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -145,13 +145,13 @@ const Dashboard = () => {
             </section>
 
             {/* Row 2 — Chart */}
-            {records.length > 1 && (
+            {chartRecords.length > 1 && (
               <section className="bg-card rounded-2xl border border-border shadow-card overflow-hidden animate-slide-up">
                 <div className="px-5 py-4 border-b border-border flex items-center justify-between">
                   <div>
                     <h2 className="font-display font-semibold text-sm text-foreground">Vitals Trend</h2>
                     <p className="text-[11px] text-muted-foreground mt-0.5">
-                      Last {Math.min(records.length, 20)} readings
+                      Last {Math.min(chartRecords.length, 20)} readings
                     </p>
                   </div>
                   <div className="hidden sm:flex items-center gap-3 text-[11px] text-muted-foreground">
@@ -161,7 +161,7 @@ const Dashboard = () => {
                   </div>
                 </div>
                 <div className="p-4">
-                  <VitalsChart records={records} />
+                  <VitalsChart records={chartRecords} />
                 </div>
               </section>
             )}
@@ -170,9 +170,9 @@ const Dashboard = () => {
             <section className="bg-card rounded-2xl border border-border shadow-card overflow-hidden animate-slide-up">
               <div className="px-5 py-4 border-b border-border">
                 <h2 className="font-display font-semibold text-sm text-foreground">Reading History</h2>
-                <p className="text-[11px] text-muted-foreground mt-0.5">{records.length} total readings</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">{totalCount.toLocaleString()} total readings</p>
               </div>
-              <HistoryTable records={records} />
+              <HistoryTable records={records} page={page} totalPages={totalPages} totalCount={totalCount} onPageChange={setPage} />
             </section>
           </>
         )}

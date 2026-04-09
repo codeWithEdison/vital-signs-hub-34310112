@@ -74,7 +74,11 @@ export function VitalsChart({ records }: VitalsChartProps) {
           <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 16% 90%)" vertical={false} />
           <XAxis
             dataKey="time"
-            tick={{ fontSize: 10, fill: "hsl(220 10% 46%)", angle: -45, textAnchor: "end" }}
+            tick={({ x, y, payload }: any) => (
+              <text x={x} y={y} dy={10} textAnchor="end" fill="hsl(220 10% 46%)" fontSize={10} transform={`rotate(-45, ${x}, ${y})`}>
+                {payload.value}
+              </text>
+            )}
             axisLine={{ stroke: "hsl(220 16% 90%)" }}
             tickLine={false}
             height={50}

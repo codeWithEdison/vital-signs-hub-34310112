@@ -38,7 +38,7 @@ function useAutoDownloadFromQR() {
 
 const Dashboard = () => {
   useAutoDownloadFromQR();
-  const { records, latest, loading, totalCount, page, setPage, totalPages, chartRecords } = useVitals();
+  const { records, latest, loading, totalCount, page, setPage, totalPages, chartRecords, chartDateRange, setChartDateRange } = useVitals();
 
   return (
     <div className="min-h-screen flex flex-col bg-background">

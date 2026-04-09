@@ -1,6 +1,7 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Thermometer, Heart, Wind, Activity, Clock, FileText } from "lucide-react";
+import { Thermometer, Heart, Wind, Activity, Clock, FileText, CalendarIcon, X } from "lucide-react";
+import { format } from "date-fns";
 import logo from "@/assets/logo.png";
 import { DashboardCard } from "@/components/DashboardCard";
 import { HistoryTable } from "@/components/HistoryTable";
@@ -9,6 +10,10 @@ import { HealthPassCard } from "@/components/HealthPassCard";
 import { useVitals } from "@/hooks/useVitals";
 import { downloadHealthPassPDF } from "@/lib/pdfHealthPass";
 import type { HealthStatus } from "@/lib/healthLogic";
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { cn } from "@/lib/utils";
 
 /* Auto-download PDF when arriving from QR scan */
 function useAutoDownloadFromQR() {
@@ -33,7 +38,7 @@ function useAutoDownloadFromQR() {
 
 const Dashboard = () => {
   useAutoDownloadFromQR();
-  const { records, latest, loading, totalCount, page, setPage, totalPages, chartRecords } = useVitals();
+  const { records, latest, loading, totalCount, page, setPage, totalPages, chartRecords, chartDateRange, setChartDateRange } = useVitals();
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -145,19 +150,53 @@ const Dashboard = () => {
             </section>
 
             {/* Row 2 — Chart */}
-            {chartRecords.length > 1 && (
+            {(chartRecords.length > 1 || chartDateRange.from || chartDateRange.to) && (
               <section className="bg-card rounded-2xl border border-border shadow-card overflow-hidden animate-slide-up">
-                <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+                <div className="px-5 py-4 border-b border-border flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <h2 className="font-display font-semibold text-sm text-foreground">Vitals Trend</h2>
                     <p className="text-[11px] text-muted-foreground mt-0.5">
-                      Last {Math.min(chartRecords.length, 50)} readings
+                      {chartDateRange.from || chartDateRange.to
+                        ? `${chartRecords.length} readings in range`
+                        : `Last ${Math.min(chartRecords.length, 50)} readings`}
                     </p>
                   </div>
-                  <div className="hidden sm:flex items-center gap-3 text-[11px] text-muted-foreground">
-                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-primary" />Temp</span>
-                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-destructive" />HR</span>
-                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-status-safe" />SpO₂</span>
+                  <div className="flex items-center gap-2">
+                    {/* Date range picker */}
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" size="sm" className={cn("h-8 text-xs gap-1.5", (chartDateRange.from || chartDateRange.to) && "border-primary text-primary")}>
+                          <CalendarIcon className="w-3.5 h-3.5" />
+                          {chartDateRange.from
+                            ? chartDateRange.to
+                              ? `${format(chartDateRange.from, "MMM d")} – ${format(chartDateRange.to, "MMM d")}`
+                              : `From ${format(chartDateRange.from, "MMM d")}`
+                            : chartDateRange.to
+                              ? `Until ${format(chartDateRange.to, "MMM d")}`
+                              : "Date range"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="end">
+                        <Calendar
+                          mode="range"
+                          selected={chartDateRange.from || chartDateRange.to ? { from: chartDateRange.from, to: chartDateRange.to } : undefined}
+                          onSelect={(range) => setChartDateRange({ from: range?.from, to: range?.to })}
+                          numberOfMonths={1}
+                          className={cn("p-3 pointer-events-auto")}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    {(chartDateRange.from || chartDateRange.to) && (
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => setChartDateRange({})}>
+                        <X className="w-3.5 h-3.5" />
+                      </Button>
+                    )}
+                    {/* Legend */}
+                    <div className="hidden sm:flex items-center gap-3 text-[11px] text-muted-foreground ml-2">
+                      <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-primary" />Temp</span>
+                      <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-destructive" />HR</span>
+                      <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-status-safe" />SpO₂</span>
+                    </div>
                   </div>
                 </div>
                 <div className="p-4">

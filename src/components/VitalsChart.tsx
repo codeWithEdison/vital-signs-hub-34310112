@@ -42,7 +42,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 
 export function VitalsChart({ records }: VitalsChartProps) {
   const chartData = [...records]
-    .slice(0, 20)
+    .slice(0, 50)
     .reverse()
     .map((r) => ({
       time: format(new Date(r.created_at), "HH:mm"),
@@ -74,9 +74,10 @@ export function VitalsChart({ records }: VitalsChartProps) {
           <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 16% 90%)" vertical={false} />
           <XAxis
             dataKey="time"
-            tick={{ fontSize: 11, fill: "hsl(220 10% 46%)" }}
+            tick={{ fontSize: 10, fill: "hsl(220 10% 46%)", angle: -45, textAnchor: "end" }}
             axisLine={{ stroke: "hsl(220 16% 90%)" }}
             tickLine={false}
+            height={50}
           />
           <YAxis
             tick={{ fontSize: 11, fill: "hsl(220 10% 46%)" }}

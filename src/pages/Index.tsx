@@ -151,7 +151,7 @@ const Dashboard = () => {
                   <div>
                     <h2 className="font-display font-semibold text-sm text-foreground">Vitals Trend</h2>
                     <p className="text-[11px] text-muted-foreground mt-0.5">
-                      Last {Math.min(chartRecords.length, 20)} readings
+                      Last {Math.min(chartRecords.length, 50)} readings
                     </p>
                   </div>
                   <div className="hidden sm:flex items-center gap-3 text-[11px] text-muted-foreground">

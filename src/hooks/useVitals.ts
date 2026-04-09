@@ -38,7 +38,7 @@ export function useVitals() {
         .from("vitals")
         .select("*")
         .order("created_at", { ascending: false })
-        .limit(20);
+        .limit(50);
       if (data) setChartRecords(data as VitalRecord[]);
     }
     fetchChart();
@@ -77,7 +77,7 @@ export function useVitals() {
           if (page === 1) {
             setRecords((prev) => [payload.new as VitalRecord, ...prev].slice(0, PAGE_SIZE));
           }
-          setChartRecords((prev) => [payload.new as VitalRecord, ...prev].slice(0, 20));
+          setChartRecords((prev) => [payload.new as VitalRecord, ...prev].slice(0, 50));
         }
       )
       .subscribe();

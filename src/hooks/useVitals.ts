@@ -19,6 +19,7 @@ export function useVitals() {
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(1);
   const [chartRecords, setChartRecords] = useState<VitalRecord[]>([]);
+  const [chartDateRange, setChartDateRange] = useState<{ from?: Date; to?: Date }>({});
 
   // Fetch total count
   useEffect(() => {
@@ -31,18 +32,35 @@ export function useVitals() {
     fetchCount();
   }, []);
 
-  // Fetch chart data (latest 20)
-  useEffect(() => {
-    async function fetchChart() {
-      const { data } = await supabase
-        .from("vitals")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(50);
-      if (data) setChartRecords(data as VitalRecord[]);
+  // Fetch chart data (with optional date range)
+  const fetchChartData = useCallback(async (range: { from?: Date; to?: Date }) => {
+    let query = supabase
+      .from("vitals")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (range.from) {
+      query = query.gte("created_at", range.from.toISOString());
     }
-    fetchChart();
+    if (range.to) {
+      const endOfDay = new Date(range.to);
+      endOfDay.setHours(23, 59, 59, 999);
+      query = query.lte("created_at", endOfDay.toISOString());
+    }
+
+    if (!range.from && !range.to) {
+      query = query.limit(50);
+    } else {
+      query = query.limit(500);
+    }
+
+    const { data } = await query;
+    if (data) setChartRecords(data as VitalRecord[]);
   }, []);
+
+  useEffect(() => {
+    fetchChartData(chartDateRange);
+  }, [chartDateRange, fetchChartData]);
 
   // Fetch paginated data
   const fetchPage = useCallback(async (p: number) => {
@@ -77,7 +95,9 @@ export function useVitals() {
           if (page === 1) {
             setRecords((prev) => [payload.new as VitalRecord, ...prev].slice(0, PAGE_SIZE));
           }
-          setChartRecords((prev) => [payload.new as VitalRecord, ...prev].slice(0, 50));
+          if (!chartDateRange.from && !chartDateRange.to) {
+            setChartRecords((prev) => [payload.new as VitalRecord, ...prev].slice(0, 50));
+          }
         }
       )
       .subscribe();
@@ -85,10 +105,10 @@ export function useVitals() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [page]);
+  }, [page, chartDateRange]);
 
   const latest = page === 1 ? records[0] ?? null : null;
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
-  return { records, latest: latest || (chartRecords[0] ?? null), loading, totalCount, page, setPage, totalPages, chartRecords, PAGE_SIZE };
+  return { records, latest: latest || (chartRecords[0] ?? null), loading, totalCount, page, setPage, totalPages, chartRecords, PAGE_SIZE, chartDateRange, setChartDateRange };
 }

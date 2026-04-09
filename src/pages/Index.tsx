@@ -1,6 +1,7 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Thermometer, Heart, Wind, Activity, Clock, FileText } from "lucide-react";
+import { Thermometer, Heart, Wind, Activity, Clock, FileText, CalendarIcon, X } from "lucide-react";
+import { format } from "date-fns";
 import logo from "@/assets/logo.png";
 import { DashboardCard } from "@/components/DashboardCard";
 import { HistoryTable } from "@/components/HistoryTable";
@@ -9,6 +10,10 @@ import { HealthPassCard } from "@/components/HealthPassCard";
 import { useVitals } from "@/hooks/useVitals";
 import { downloadHealthPassPDF } from "@/lib/pdfHealthPass";
 import type { HealthStatus } from "@/lib/healthLogic";
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { cn } from "@/lib/utils";
 
 /* Auto-download PDF when arriving from QR scan */
 function useAutoDownloadFromQR() {

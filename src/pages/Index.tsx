@@ -145,13 +145,13 @@ const Dashboard = () => {
             </section>
 
             {/* Row 2 — Chart */}
-            {records.length > 1 && (
+            {chartRecords.length > 1 && (
               <section className="bg-card rounded-2xl border border-border shadow-card overflow-hidden animate-slide-up">
                 <div className="px-5 py-4 border-b border-border flex items-center justify-between">
                   <div>
                     <h2 className="font-display font-semibold text-sm text-foreground">Vitals Trend</h2>
                     <p className="text-[11px] text-muted-foreground mt-0.5">
-                      Last {Math.min(records.length, 20)} readings
+                      Last {Math.min(chartRecords.length, 20)} readings
                     </p>
                   </div>
                   <div className="hidden sm:flex items-center gap-3 text-[11px] text-muted-foreground">

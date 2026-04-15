@@ -19,6 +19,7 @@ interface VitalRecord {
 
 interface VitalsChartProps {
   records: VitalRecord[];
+  maxPoints?: number;
 }
 
 const CustomTooltip = ({ active, payload, label }: any) => {
@@ -40,9 +41,9 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   );
 };
 
-export function VitalsChart({ records }: VitalsChartProps) {
+export function VitalsChart({ records, maxPoints = 1000 }: VitalsChartProps) {
   const chartData = [...records]
-    .slice(0, 50)
+    .slice(0, maxPoints)
     .reverse()
     .map((r) => ({
       time: format(new Date(r.created_at), "HH:mm"),

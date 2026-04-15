@@ -12,6 +12,7 @@ interface VitalRecord {
 }
 
 const PAGE_SIZE = 20;
+const DEFAULT_CHART_MAX_TRENDS = 1000;
 
 export function useVitals() {
   const [records, setRecords] = useState<VitalRecord[]>([]);
@@ -20,6 +21,7 @@ export function useVitals() {
   const [page, setPage] = useState(1);
   const [chartRecords, setChartRecords] = useState<VitalRecord[]>([]);
   const [chartDateRange, setChartDateRange] = useState<{ from?: Date; to?: Date }>({});
+  const [chartTrendLimit, setChartTrendLimit] = useState(DEFAULT_CHART_MAX_TRENDS);
 
   // Fetch total count
   useEffect(() => {
@@ -48,15 +50,11 @@ export function useVitals() {
       query = query.lte("created_at", endOfDay.toISOString());
     }
 
-    if (!range.from && !range.to) {
-      query = query.limit(50);
-    } else {
-      query = query.limit(500);
-    }
+    query = query.limit(chartTrendLimit);
 
     const { data } = await query;
     if (data) setChartRecords(data as VitalRecord[]);
-  }, []);
+  }, [chartTrendLimit]);
 
   useEffect(() => {
     fetchChartData(chartDateRange);
@@ -96,7 +94,7 @@ export function useVitals() {
             setRecords((prev) => [payload.new as VitalRecord, ...prev].slice(0, PAGE_SIZE));
           }
           if (!chartDateRange.from && !chartDateRange.to) {
-            setChartRecords((prev) => [payload.new as VitalRecord, ...prev].slice(0, 50));
+            setChartRecords((prev) => [payload.new as VitalRecord, ...prev].slice(0, chartTrendLimit));
           }
         }
       )
@@ -105,10 +103,25 @@ export function useVitals() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [page, chartDateRange]);
+  }, [page, chartDateRange, chartTrendLimit]);
 
   const latest = page === 1 ? records[0] ?? null : null;
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
-  return { records, latest: latest || (chartRecords[0] ?? null), loading, totalCount, page, setPage, totalPages, chartRecords, PAGE_SIZE, chartDateRange, setChartDateRange };
+  return {
+    records,
+    latest: latest || (chartRecords[0] ?? null),
+    loading,
+    totalCount,
+    page,
+    setPage,
+    totalPages,
+    chartRecords,
+    PAGE_SIZE,
+    chartDateRange,
+    setChartDateRange,
+    chartTrendLimit,
+    setChartTrendLimit,
+    chartTrendLimitOptions: [100, 500, 1000],
+  };
 }

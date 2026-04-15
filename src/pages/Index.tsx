@@ -13,6 +13,7 @@ import type { HealthStatus } from "@/lib/healthLogic";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
 /* Auto-download PDF when arriving from QR scan */
@@ -38,7 +39,21 @@ function useAutoDownloadFromQR() {
 
 const Dashboard = () => {
   useAutoDownloadFromQR();
-  const { records, latest, loading, totalCount, page, setPage, totalPages, chartRecords, chartDateRange, setChartDateRange } = useVitals();
+  const {
+    records,
+    latest,
+    loading,
+    totalCount,
+    page,
+    setPage,
+    totalPages,
+    chartRecords,
+    chartDateRange,
+    setChartDateRange,
+    chartTrendLimit,
+    setChartTrendLimit,
+    chartTrendLimitOptions,
+  } = useVitals();
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -158,10 +173,22 @@ const Dashboard = () => {
                     <p className="text-[11px] text-muted-foreground mt-0.5">
                       {chartDateRange.from || chartDateRange.to
                         ? `${chartRecords.length} readings in range`
-                        : `Last ${Math.min(chartRecords.length, 50)} readings`}
+                        : `Last ${Math.min(chartRecords.length, chartTrendLimit)} readings`}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
+                    <Select value={String(chartTrendLimit)} onValueChange={(value) => setChartTrendLimit(Number(value))}>
+                      <SelectTrigger className="h-8 w-[120px] text-xs">
+                        <SelectValue placeholder="Trend size" />
+                      </SelectTrigger>
+                      <SelectContent align="end">
+                        {chartTrendLimitOptions.map((option) => (
+                          <SelectItem key={option} value={String(option)}>
+                            Last {option}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     {/* Date range picker */}
                     <Popover>
                       <PopoverTrigger asChild>
@@ -200,7 +227,7 @@ const Dashboard = () => {
                   </div>
                 </div>
                 <div className="p-4">
-                  <VitalsChart records={chartRecords} />
+                  <VitalsChart records={chartRecords} maxPoints={chartTrendLimit} />
                 </div>
               </section>
             )}

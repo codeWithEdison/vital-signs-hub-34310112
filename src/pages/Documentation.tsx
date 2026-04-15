@@ -3,6 +3,7 @@ import { ArrowLeft, Cpu, Activity, Thermometer, Heart, Wind } from "lucide-react
 import logo from "@/assets/logo.png";
 import { useVitals } from "@/hooks/useVitals";
 import { useMemo } from "react";
+import { evaluateHealth, type HealthStatus } from "@/lib/healthLogic";
 
 /* ── Correlation helper ── */
 function pearson(x: number[], y: number[]): number {
@@ -38,6 +39,38 @@ export default function Documentation() {
     const min = (a: number[]) => Math.min(...a);
     const max = (a: number[]) => Math.max(...a);
     const avg = (a: number[]) => a.reduce((s, v) => s + v, 0) / a.length;
+    const classify = (r: { temperature: number; heart_rate: number; spo2: number }) =>
+      evaluateHealth({
+        temperature: r.temperature,
+        heart_rate: r.heart_rate,
+        spo2: r.spo2,
+      }).status;
+
+    const consistency = records.reduce(
+      (acc, r) => {
+        const expected = classify(r);
+        if ((r.status as HealthStatus) === expected) {
+          acc.matched += 1;
+        } else {
+          acc.mismatched += 1;
+        }
+        return acc;
+      },
+      { matched: 0, mismatched: 0 }
+    );
+
+    const categorizedSample = records.slice(0, 10).map((r) => {
+      const expected = classify(r);
+      return {
+        id: r.id,
+        temperature: r.temperature,
+        heart_rate: r.heart_rate,
+        spo2: r.spo2,
+        stored: r.status as HealthStatus,
+        expected,
+        isConsistent: (r.status as HealthStatus) === expected,
+      };
+    });
 
     // Normalization ranges
     const norm = (vals: number[]) => {
@@ -50,6 +83,11 @@ export default function Documentation() {
       safe: records.filter(r => r.status === "SAFE").length,
       warning: records.filter(r => r.status === "WARNING").length,
       alert: records.filter(r => r.status === "ALERT").length,
+      classPct: {
+        safe: (records.filter(r => r.status === "SAFE").length / records.length) * 100,
+        warning: (records.filter(r => r.status === "WARNING").length / records.length) * 100,
+        alert: (records.filter(r => r.status === "ALERT").length / records.length) * 100,
+      },
       temp: { min: min(temps), max: max(temps), avg: avg(temps) },
       hr: { min: min(hrs), max: max(hrs), avg: avg(hrs) },
       spo2: { min: min(spo2s), max: max(spo2s), avg: avg(spo2s) },
@@ -64,6 +102,8 @@ export default function Documentation() {
         normHr: norm(hrs)[i],
         normSpo2: norm(spo2s)[i],
       })),
+      consistency,
+      categorizedSample,
     };
   }, [records]);
 
@@ -91,71 +131,88 @@ export default function Documentation() {
             Sensor Data Documentation & Analysis
           </h1>
           <p className="mt-2 text-sm text-muted-foreground max-w-2xl">
-            Comprehensive documentation of data conversion, calibration, normalization, correlation analysis, and classification methodology.
+            End-to-end technical documentation for how raw signals become clinical indicators, including sensor capture format, translation logic, formula rationale, calibration assumptions, and threshold-based status evaluation.
           </p>
         </header>
 
         {/* ─── 1. Sensor Identification ─── */}
         <Section icon={<Cpu />} title="1. Sensor Identification & Hardware">
           <p className="text-sm text-muted-foreground mb-4">
-            Each sensor in the kiosk has a unique identifier and role in the data pipeline.
+            Each sensor has a distinct physiological target and contributes one part of the final health assessment.
           </p>
           <div className="grid sm:grid-cols-3 gap-4">
             <SensorCard
               name="MAX30205"
               id="SENSOR-TEMP-01"
               type="Temperature"
-              protocol="I²C (0x48)"
+              protocol="I²C (Inter-Integrated Circuit, 0x48)"
               desc="Human body temperature sensor, ±0.1°C accuracy"
             />
             <SensorCard
-              name="MAX30102 (IR)"
+              name="MAX30102 (IR: Infrared)"
               id="SENSOR-HR-01"
               type="Heart Rate"
-              protocol="I²C (0x57)"
-              desc="Infrared PPG channel for pulse detection"
+              protocol="I²C (Inter-Integrated Circuit, 0x57)"
+              desc="Infrared PPG (Photoplethysmography) channel for pulse detection"
             />
             <SensorCard
               name="MAX30102 (Red)"
               id="SENSOR-SPO2-01"
-              type="SpO₂"
-              protocol="I²C (0x57)"
+              type="SpO₂ (Peripheral Oxygen Saturation)"
+              protocol="I²C (Inter-Integrated Circuit, 0x57)"
               desc="Red LED channel for blood oxygen estimation"
             />
           </div>
+          <p className="text-xs text-muted-foreground mt-4 leading-relaxed">
+            The MAX30205 measures skin-contact temperature directly in digital form. The MAX30102 is an optical PPG (Photoplethysmography) sensor: its IR (Infrared) channel is primarily used for pulse timing
+            (heart-rate extraction), while the red/IR pair is used for SpO₂ (Peripheral Oxygen Saturation) estimation through relative light absorption differences in pulsatile blood.
+          </p>
         </Section>
 
-        {/* ─── 2. Conversion Formulas ─── */}
-        <Section icon={<Activity />} title="2. Data Conversion Formulas">
+        {/* ─── 2. Sensor Capture Format & Translation Flow ─── */}
+        <Section icon={<Activity />} title="2. Sensor Capture Format & Translation Flow">
           <p className="text-sm text-muted-foreground mb-4">
-            Raw sensor data (ADC counts) are converted to meaningful units using these formulas:
+            Data arrives as time-ordered records and is translated in stages from device-level signals into clinically interpretable values.
+          </p>
+          <div className="bg-accent/30 rounded-xl p-4 space-y-2 text-xs text-muted-foreground leading-relaxed">
+            <p><span className="font-semibold text-foreground">Stored record schema:</span> <span className="font-mono">{"{ id, temperature, heart_rate, spo2, status, recommendation, created_at }"}</span></p>
+            <p><span className="font-semibold text-foreground">Type mapping:</span> <span className="font-mono">temperature</span> in °C (float), <span className="font-mono">heart_rate</span> in bpm (beats per minute, integer-like), <span className="font-mono">spo2</span> in % (integer-like), <span className="font-mono">created_at</span> ISO (International Organization for Standardization) timestamp.</p>
+            <p><span className="font-semibold text-foreground">Logical translation chain:</span> Sensor sample → signal conditioning/filtering → feature extraction (peaks or AC/DC ratio, where AC is alternating pulsatile component and DC is direct baseline component) → unit conversion formula → threshold rules → final status/recommendation.</p>
+            <p><span className="font-semibold text-foreground">Why this matters:</span> separating acquisition, conversion, and decision logic makes the system easier to audit, recalibrate, and validate clinically.</p>
+          </div>
+        </Section>
+
+        {/* ─── 3. Conversion Formulas ─── */}
+        <Section icon={<Activity />} title="3. Data Conversion Formulas & Why They Work">
+          <p className="text-sm text-muted-foreground mb-4">
+            Raw device outputs are not directly interpretable. These formulas convert hardware-level values into units used by clinicians.
           </p>
           <div className="space-y-4">
             <FormulaCard
               sensor="MAX30205 — Temperature"
               formula="T(°C) = Raw_16bit × 0.00390625"
-              explanation="The MAX30205 outputs a 16-bit two's complement value. Each LSB represents 0.00390625°C (1/256). The raw register value is multiplied by this resolution to yield temperature in Celsius."
+              explanation="The MAX30205 register is a signed 16-bit value where each LSB (Least Significant Bit) corresponds to 1/256°C. Multiplying by 0.00390625 converts digital code to physical temperature. The formula is derived from sensor resolution, not from empirical fitting, which improves repeatability across devices."
               range="35.0°C — 42.0°C (clinical range)"
             />
             <FormulaCard
               sensor="MAX30102 — Heart Rate"
               formula="HR(bpm) = 60 / avg(peak_intervals_sec)"
-              explanation="The IR channel outputs PPG waveform data. Peaks are detected using a moving-average threshold algorithm. The average time between consecutive peaks gives the inter-beat interval (IBI), and HR = 60 / IBI."
+              explanation="The IR (Infrared) PPG (Photoplethysmography) signal rises and falls with blood volume change each beat. After smoothing/noise suppression, successive pulse peaks are detected. The average IBI (Inter-Beat Interval) is measured in seconds, and dividing 60 by IBI converts beat period into bpm (beats per minute). This is a timing-based derivation, so accurate peak detection is the critical step."
               range="40 — 200 bpm (physiological range)"
             />
             <FormulaCard
               sensor="MAX30102 — SpO₂"
               formula="SpO₂(%) = 110 - 25 × (R_red_AC/R_red_DC) / (R_ir_AC/R_ir_DC)"
-              explanation="The ratio of ratios (R) between red and IR channels' AC and DC components is computed. This R value is mapped to SpO₂ using the empirical linear approximation: SpO₂ ≈ 110 - 25R."
+              explanation="SpO₂ (Peripheral Oxygen Saturation) estimation uses a ratio-of-ratios: pulsatile (AC, alternating current-like component) and baseline (DC, direct current-like component) for red and IR (Infrared) channels are compared to form R. Oxygenated and deoxygenated hemoglobin absorb red/IR light differently, so R correlates with oxygen saturation. The linear mapping (110 - 25R) is an empirical approximation and should be treated as calibrated estimation, not invasive-grade blood gas measurement."
               range="70% — 100% (clinical range)"
             />
           </div>
         </Section>
 
-        {/* ─── 3. Calibration ─── */}
-        <Section icon={<Thermometer />} title="3. Calibration Reference Values">
+        {/* ─── 4. Calibration ─── */}
+        <Section icon={<Thermometer />} title="4. Calibration Reference Values">
           <p className="text-sm text-muted-foreground mb-4">
-            Sensors are calibrated against known reference instruments to correct for drift and inaccuracies.
+            Calibration aligns measured values with trusted reference instruments to reduce systematic bias and drift.
           </p>
           <div className="overflow-x-auto">
             <table className="w-full text-sm border-collapse">
@@ -176,7 +233,7 @@ export default function Documentation() {
                 </tr>
                 <tr className="border-b border-border/50">
                   <td className="py-2 pr-4">MAX30102 (HR)</td>
-                  <td className="py-2 pr-4">Clinical pulse oximeter</td>
+                  <td className="py-2 pr-4">Clinical pulse oximeter (HR reference mode)</td>
                   <td className="py-2 pr-4">72 bpm at rest</td>
                   <td className="py-2 pr-4">±2 bpm tolerance</td>
                 </tr>
@@ -189,12 +246,16 @@ export default function Documentation() {
               </tbody>
             </table>
           </div>
+          <p className="text-xs text-muted-foreground mt-4 leading-relaxed">
+            Calibration offsets should be reviewed after hardware changes, LED current updates, finger-placement changes, or major ambient lighting differences. Stable calibration is essential
+            because downstream classification uses fixed thresholds.
+          </p>
         </Section>
 
-        {/* ─── 4. Normalization ─── */}
-        <Section icon={<Activity />} title="4. Data Normalization (Min-Max Scaling)">
+        {/* ─── 5. Normalization ─── */}
+        <Section icon={<Activity />} title="5. Data Normalization (Min-Max Scaling)">
           <p className="text-sm text-muted-foreground mb-4">
-            Raw time-series signals are normalized to a [0, 1] range using Min-Max scaling for classification:
+            Min-max normalization rescales features to [0, 1] so parameters with different units can be compared consistently in analytics/visual pipelines.
           </p>
           <div className="bg-accent/50 rounded-xl p-4 mb-4 font-mono text-sm text-foreground">
             X_norm = (X - X_min) / (X_max - X_min)
@@ -224,7 +285,7 @@ export default function Documentation() {
                     <td className="py-2 pr-4">{stats.hr.avg.toFixed(1)}</td>
                   </tr>
                   <tr>
-                    <td className="py-2 pr-4">SpO₂ (%)</td>
+                    <td className="py-2 pr-4">SpO₂ (Peripheral Oxygen Saturation, %)</td>
                     <td className="py-2 pr-4">{stats.spo2.min}</td>
                     <td className="py-2 pr-4">{stats.spo2.max}</td>
                     <td className="py-2 pr-4">{stats.spo2.avg.toFixed(1)}</td>
@@ -233,10 +294,13 @@ export default function Documentation() {
               </table>
             </div>
           )}
+          <p className="text-xs text-muted-foreground mt-4 leading-relaxed">
+            Note: in this dashboard, final SAFE/WARNING/ALERT decisions are threshold-based on native units (°C, bpm, %). Normalization is used for analysis comparability and model-ready preprocessing, not to replace clinical thresholds.
+          </p>
         </Section>
 
-        {/* ─── 5. Correlation ─── */}
-        <Section icon={<Heart />} title="5. Sensor Data Correlation Analysis">
+        {/* ─── 6. Correlation ─── */}
+        <Section icon={<Heart />} title="6. Sensor Data Correlation Analysis">
           <p className="text-sm text-muted-foreground mb-4">
             Pearson correlation coefficients between sensor readings (computed from {stats?.total ?? 0} records):
           </p>
@@ -252,14 +316,17 @@ export default function Documentation() {
                 correlations are expected to be near zero (negligible). In real clinical data, elevated temperature often correlates 
                 with increased heart rate (positive) and decreased SpO₂ (negative) due to physiological stress responses.
               </p>
+              <p className="text-xs text-muted-foreground mt-2">
+                Correlation indicates linear association only. It does not prove causality and can be unstable on small or noisy samples.
+              </p>
             </>
           )}
         </Section>
 
-        {/* ─── 6. Classification ─── */}
-        <Section icon={<Wind />} title="6. Point-Level Classification">
+        {/* ─── 7. Classification ─── */}
+        <Section icon={<Wind />} title="7. Point-Level Classification Logic">
           <p className="text-sm text-muted-foreground mb-4">
-            Each reading is classified into one of three health status categories using threshold-based rules:
+            Each record is evaluated by deterministic rules in sequence. Rule order is important because higher-risk conditions must override lower-risk conditions.
           </p>
           <div className="space-y-3">
             <ClassCard
@@ -271,7 +338,7 @@ export default function Documentation() {
             <ClassCard
               status="WARNING"
               color="bg-status-warning"
-              rules={["Heart Rate > 100 bpm", "(and not ALERT)"]}
+              rules={["Heart Rate > 100 bpm", "Applied only when ALERT rule is false"]}
               action="Rest and monitor your condition"
             />
             <ClassCard
@@ -281,6 +348,10 @@ export default function Documentation() {
               action="You are in good health"
             />
           </div>
+          <p className="text-xs text-muted-foreground mt-4 leading-relaxed">
+            Logical order implemented by the app is: check <span className="font-mono">ALERT</span> first, then <span className="font-mono">WARNING</span>, otherwise <span className="font-mono">SAFE</span>.
+            This prevents a high-risk low-SpO₂ case from being mislabeled as WARNING due to heart rate alone.
+          </p>
           {stats && (
             <div className="mt-4 flex gap-4 text-sm">
               <span className="text-status-safe font-semibold">SAFE: {stats.safe}</span>
@@ -291,10 +362,10 @@ export default function Documentation() {
           )}
         </Section>
 
-        {/* ─── 7. Data Summary ─── */}
-        <Section icon={<Cpu />} title="7. Dataset Summary">
+        {/* ─── 8. Data Summary ─── */}
+        <Section icon={<Cpu />} title="8. Dataset Summary">
           <p className="text-sm text-muted-foreground mb-4">
-            Overview of the collected dataset used for analysis and classification.
+            Snapshot of the dataset currently loaded in the dashboard for analysis and status monitoring.
           </p>
           {stats && (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -304,6 +375,204 @@ export default function Documentation() {
               <StatBox label="Classification" value="3 classes" />
             </div>
           )}
+        </Section>
+
+        {/* ─── 9. Acronym Glossary ─── */}
+        <Section icon={<Cpu />} title="9. Acronym Glossary">
+          <p className="text-sm text-muted-foreground mb-4">
+            Quick reference for technical abbreviations used in this document.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="border-b border-border text-left">
+                  <th className="py-2 pr-4 font-semibold text-foreground">Acronym</th>
+                  <th className="py-2 pr-4 font-semibold text-foreground">Meaning</th>
+                </tr>
+              </thead>
+              <tbody className="text-muted-foreground">
+                <tr className="border-b border-border/50">
+                  <td className="py-2 pr-4 font-mono">I²C</td>
+                  <td className="py-2 pr-4">Inter-Integrated Circuit communication bus</td>
+                </tr>
+                <tr className="border-b border-border/50">
+                  <td className="py-2 pr-4 font-mono">PPG</td>
+                  <td className="py-2 pr-4">Photoplethysmography (optical blood volume waveform)</td>
+                </tr>
+                <tr className="border-b border-border/50">
+                  <td className="py-2 pr-4 font-mono">IR</td>
+                  <td className="py-2 pr-4">Infrared light channel</td>
+                </tr>
+                <tr className="border-b border-border/50">
+                  <td className="py-2 pr-4 font-mono">SpO₂</td>
+                  <td className="py-2 pr-4">Peripheral capillary oxygen saturation</td>
+                </tr>
+                <tr className="border-b border-border/50">
+                  <td className="py-2 pr-4 font-mono">HR</td>
+                  <td className="py-2 pr-4">Heart Rate</td>
+                </tr>
+                <tr className="border-b border-border/50">
+                  <td className="py-2 pr-4 font-mono">IBI</td>
+                  <td className="py-2 pr-4">Inter-Beat Interval</td>
+                </tr>
+                <tr className="border-b border-border/50">
+                  <td className="py-2 pr-4 font-mono">LSB</td>
+                  <td className="py-2 pr-4">Least Significant Bit</td>
+                </tr>
+                <tr className="border-b border-border/50">
+                  <td className="py-2 pr-4 font-mono">AC / DC</td>
+                  <td className="py-2 pr-4">Alternating (pulsatile) / Direct (baseline) signal components</td>
+                </tr>
+                <tr>
+                  <td className="py-2 pr-4 font-mono">ISO</td>
+                  <td className="py-2 pr-4">International Organization for Standardization timestamp format</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </Section>
+
+        {/* ─── 10. Data Categorization and Classification ─── */}
+        <Section icon={<Activity />} title="10. Data Categorization and Classification">
+          <div className="space-y-5">
+            <div>
+              <h3 className="text-sm font-semibold text-foreground mb-2">10.1 Group-Validated Expected Results</h3>
+              <ul className="text-xs text-muted-foreground space-y-1 leading-relaxed">
+                <li>• Continuous ingestion of time-series records without missing mandatory fields.</li>
+                <li>• Physiologically plausible ranges for temperature, heart rate, and SpO₂.</li>
+                <li>• Deterministic and explainable class assignment (SAFE/WARNING/ALERT) per record.</li>
+                <li>• Real-time status consistency between stored label and threshold logic.</li>
+                <li>• Clinically meaningful recommendation text linked to each assigned class.</li>
+              </ul>
+            </div>
+
+            <div>
+              <h3 className="text-sm font-semibold text-foreground mb-2">10.2 Classification Objective</h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                The current objective is <span className="font-semibold text-foreground">risk stratification and anomaly flagging</span> at point level (each incoming reading).
+                It is a rule-based clinical triage stage, not a long-horizon prediction model. In this deployment, three physiological channels are classified
+                (temperature, heart rate, SpO₂), while the ESP32 and sensor modules provide the capture/transport pipeline.
+              </p>
+            </div>
+
+            <div>
+              <h3 className="text-sm font-semibold text-foreground mb-2">10.3 Time-Series to Label Mapping</h3>
+              <p className="text-xs text-muted-foreground mb-3 leading-relaxed">
+                Continuous streams are categorized record-by-record using threshold precedence:
+                <span className="font-mono"> ALERT (temp &gt; 38.0 or SpO₂ &lt; 94) → WARNING (HR &gt; 100) → SAFE</span>.
+              </p>
+              {stats && (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm border-collapse">
+                    <thead>
+                      <tr className="border-b border-border text-left">
+                        <th className="py-2 pr-4 font-semibold text-foreground">Class</th>
+                        <th className="py-2 pr-4 font-semibold text-foreground">Count</th>
+                        <th className="py-2 pr-4 font-semibold text-foreground">Share</th>
+                        <th className="py-2 pr-4 font-semibold text-foreground">Primary Trigger</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-muted-foreground">
+                      <tr className="border-b border-border/50">
+                        <td className="py-2 pr-4">SAFE</td>
+                        <td className="py-2 pr-4">{stats.safe}</td>
+                        <td className="py-2 pr-4">{stats.classPct.safe.toFixed(1)}%</td>
+                        <td className="py-2 pr-4">Temp ≤ 38.0, HR ≤ 100, SpO₂ ≥ 94</td>
+                      </tr>
+                      <tr className="border-b border-border/50">
+                        <td className="py-2 pr-4">WARNING</td>
+                        <td className="py-2 pr-4">{stats.warning}</td>
+                        <td className="py-2 pr-4">{stats.classPct.warning.toFixed(1)}%</td>
+                        <td className="py-2 pr-4">HR &gt; 100 and not ALERT</td>
+                      </tr>
+                      <tr>
+                        <td className="py-2 pr-4">ALERT</td>
+                        <td className="py-2 pr-4">{stats.alert}</td>
+                        <td className="py-2 pr-4">{stats.classPct.alert.toFixed(1)}%</td>
+                        <td className="py-2 pr-4">Temp &gt; 38.0 or SpO₂ &lt; 94</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <h3 className="text-sm font-semibold text-foreground mb-2">10.4 Correlation Logic Used During Class Transformation</h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Classification itself remains threshold-based for interpretability. Correlation is applied as an analysis layer to verify whether multi-sensor behavior
+                is coherent over time (for example, fever trends with elevated heart rate). Pearson coefficients quantify linear co-movement; they support quality review
+                and future model design but do not override threshold labels in the current implementation.
+              </p>
+            </div>
+
+            <div>
+              <h3 className="text-sm font-semibold text-foreground mb-2">10.5 Mathematical Methods and Algorithms</h3>
+              <ul className="text-xs text-muted-foreground space-y-1 leading-relaxed">
+                <li>• Conversion equations map sensor-level digital outputs into °C, bpm, and SpO₂%.</li>
+                <li>• Peak-interval method estimates heart rate from PPG waveform timing.</li>
+                <li>• Ratio-of-ratios method estimates SpO₂ from red/IR AC-DC components.</li>
+                <li>• Min-max scaling normalizes features for cross-signal comparability.</li>
+                <li>• Pearson correlation measures linear association strength between sensors.</li>
+                <li>• Deterministic rule engine performs final class assignment with explicit precedence.</li>
+              </ul>
+            </div>
+
+            <div>
+              <h3 className="text-sm font-semibold text-foreground mb-2">10.6 Label Consistency Check (Stored vs Rule-Recomputed)</h3>
+              <p className="text-xs text-muted-foreground mb-3 leading-relaxed">
+                To verify data arrangement quality, each stored label is recomputed using the same threshold logic and compared for agreement.
+              </p>
+              {stats && (
+                <>
+                  <div className="grid sm:grid-cols-3 gap-3 mb-3">
+                    <div className="bg-accent/30 rounded-xl p-3">
+                      <p className="text-[10px] text-muted-foreground">Matched labels</p>
+                      <p className="text-lg font-bold text-foreground">{stats.consistency.matched}</p>
+                    </div>
+                    <div className="bg-accent/30 rounded-xl p-3">
+                      <p className="text-[10px] text-muted-foreground">Mismatched labels</p>
+                      <p className="text-lg font-bold text-foreground">{stats.consistency.mismatched}</p>
+                    </div>
+                    <div className="bg-accent/30 rounded-xl p-3">
+                      <p className="text-[10px] text-muted-foreground">Agreement rate</p>
+                      <p className="text-lg font-bold text-foreground">
+                        {((stats.consistency.matched / stats.total) * 100).toFixed(1)}%
+                      </p>
+                    </div>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm border-collapse">
+                      <thead>
+                        <tr className="border-b border-border text-left">
+                          <th className="py-2 pr-4 font-semibold text-foreground">Record</th>
+                          <th className="py-2 pr-4 font-semibold text-foreground">Temp (°C)</th>
+                          <th className="py-2 pr-4 font-semibold text-foreground">HR (bpm)</th>
+                          <th className="py-2 pr-4 font-semibold text-foreground">SpO₂ (%)</th>
+                          <th className="py-2 pr-4 font-semibold text-foreground">Stored</th>
+                          <th className="py-2 pr-4 font-semibold text-foreground">Recomputed</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-muted-foreground">
+                        {stats.categorizedSample.map((row) => (
+                          <tr key={row.id} className="border-b border-border/50">
+                            <td className="py-2 pr-4 font-mono text-[10px]">{row.id.slice(0, 8)}</td>
+                            <td className="py-2 pr-4">{row.temperature.toFixed(1)}</td>
+                            <td className="py-2 pr-4">{row.heart_rate}</td>
+                            <td className="py-2 pr-4">{row.spo2}</td>
+                            <td className="py-2 pr-4">{row.stored}</td>
+                            <td className={`py-2 pr-4 ${row.isConsistent ? "text-status-safe" : "text-status-alert"}`}>
+                              {row.expected}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </Section>
       </main>
 

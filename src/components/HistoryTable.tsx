@@ -1,6 +1,7 @@
 import { StatusBadge } from "./StatusBadge";
 import type { HealthStatus } from "@/lib/healthLogic";
 import { format } from "date-fns";
+import { useState } from "react";
 import { Thermometer, Heart, Wind, Download, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "./ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -24,7 +25,13 @@ interface HistoryTableProps {
   onPageChange: (page: number) => void;
 }
 
-async function exportCSV() {
+function csvCell(value: unknown): string {
+  const raw = value == null ? "" : String(value);
+  const escaped = raw.replace(/"/g, '""');
+  return `"${escaped}"`;
+}
+
+async function buildExportAllCSV() {
   toast.info("Preparing CSV export…");
   let allData: VitalRecord[] = [];
   let from = 0;
@@ -37,28 +44,76 @@ async function exportCSV() {
       .order("created_at", { ascending: false })
       .range(from, from + batchSize - 1);
 
-    if (error || !data || data.length === 0) break;
+    if (error) {
+      toast.error(`Export failed: ${error.message}`);
+      return;
+    }
+    if (!data || data.length === 0) break;
     allData = allData.concat(data as VitalRecord[]);
     if (data.length < batchSize) break;
     from += batchSize;
   }
 
+  if (allData.length === 0) {
+    toast.info("No records to export");
+    return;
+  }
+
   const header = "ID,Temperature (°C),Heart Rate (bpm),SpO2 (%),Status,Recommendation,Timestamp\n";
   const rows = allData.map((r) =>
-    `${r.id},${r.temperature},${r.heart_rate},${r.spo2},${r.status},"${r.recommendation}",${r.created_at}`
+    [
+      csvCell(r.id),
+      csvCell(r.temperature),
+      csvCell(r.heart_rate),
+      csvCell(r.spo2),
+      csvCell(r.status),
+      csvCell(r.recommendation),
+      csvCell(r.created_at),
+    ].join(",")
   ).join("\n");
 
-  const blob = new Blob([header + rows], { type: "text/csv" });
+  const filename = `vitals_export_${format(new Date(), "yyyy-MM-dd_HHmm")}.csv`;
+  // Add UTF-8 BOM so Excel opens Unicode headers/text correctly.
+  const blob = new Blob(["\uFEFF" + header + rows], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `vitals_export_${format(new Date(), "yyyy-MM-dd_HHmm")}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-  toast.success(`Exported ${allData.length} records`);
+  toast.success(`Prepared ${allData.length} records for download`);
+  return { url, filename, count: allData.length };
 }
 
 export function HistoryTable({ records, page, totalPages, totalCount, onPageChange }: HistoryTableProps) {
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [downloadName, setDownloadName] = useState<string>("");
+  const [isExporting, setIsExporting] = useState(false);
+
+  const triggerDownload = (url: string, filename: string) => {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.rel = "noopener";
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  const onExportAll = async () => {
+    if (isExporting) return;
+    setIsExporting(true);
+    try {
+      if (downloadUrl) {
+        URL.revokeObjectURL(downloadUrl);
+      }
+      const result = await buildExportAllCSV();
+      if (!result) return;
+      setDownloadUrl(result.url);
+      setDownloadName(result.filename);
+      // Try automatic download first. If browser blocks it, fallback link remains visible.
+      triggerDownload(result.url, result.filename);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   if (records.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
@@ -120,9 +175,18 @@ export function HistoryTable({ records, page, totalPages, totalCount, onPageChan
       {/* Footer: pagination + export */}
       <div className="px-5 py-3 border-t border-border flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => exportCSV()} className="gap-1.5 text-xs">
-            <Download className="w-3.5 h-3.5" /> Export CSV
+          <Button variant="outline" size="sm" onClick={onExportAll} className="gap-1.5 text-xs" disabled={isExporting}>
+            <Download className="w-3.5 h-3.5" /> Export All Data
           </Button>
+          {downloadUrl && (
+            <button
+              type="button"
+              onClick={() => triggerDownload(downloadUrl, downloadName)}
+              className="text-[11px] text-primary hover:underline"
+            >
+              Click here if download did not start
+            </button>
+          )}
           <span className="text-[11px] text-muted-foreground">{totalCount.toLocaleString()} records</span>
         </div>
 

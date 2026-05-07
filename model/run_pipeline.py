@@ -116,22 +116,17 @@ def main() -> None:
         print("\n=== ML skipped (need more rows after cleaning; try --sample-n 500) ===")
         return
 
-    print("\n=== Predictive models (target = rule_status) ===")
+    print("\n=== Predictive model: logistic_regression (target = rule_status) ===")
     out = train_and_evaluate(cleaned, target_col="rule_status", random_state=42)
-    best_name, best_acc = None, -1.0
-    for name, payload in out["results"].items():
-        acc = payload["accuracy"]
-        if acc > best_acc:
-            best_name, best_acc = name, acc
-        print(f"\n--- {name} ---")
-        print(f"Holdout accuracy: {acc:.4f}")
-        print(payload["report"])
+    payload = out["results"]["logistic_regression"]
+    print("\n--- logistic_regression ---")
+    print(f"Holdout accuracy: {payload['accuracy']:.4f}")
+    print(payload["report"])
 
-    print(f"\nBest holdout accuracy: {best_name} ({best_acc:.4f})")
+    print(f"\nSelected model: logistic_regression ({payload['accuracy']:.4f})")
     print(
-        "\nInterpretation: models learn the same nonlinear boundaries as the rule block "
-        "from (temperature, heart_rate, spo2). Compare coefficients/feature importances "
-        "to the documented thresholds above."
+        "\nInterpretation: logistic regression learns decision boundaries from "
+        "(temperature, heart_rate, spo2). Compare coefficients to documented thresholds."
     )
 
 

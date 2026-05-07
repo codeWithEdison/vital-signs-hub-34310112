@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-HealthStatus = Literal["SAFE", "WARNING", "ALERT"]
+HealthStatus = Literal["SAFE", "OBSERVE", "WARNING", "ALERT", "CRITICAL"]
 
 
 @dataclass(frozen=True)
@@ -15,6 +15,11 @@ class HealthEvaluation:
 
 
 def evaluate_health(temperature: float, heart_rate: int, spo2: int) -> HealthEvaluation:
+    if spo2 < 90 or temperature >= 39.5 or heart_rate >= 140:
+        return HealthEvaluation(
+            status="CRITICAL",
+            recommendation="Seek emergency care immediately",
+        )
     if temperature > 38.0 or spo2 < 94:
         return HealthEvaluation(
             status="ALERT",
@@ -24,6 +29,11 @@ def evaluate_health(temperature: float, heart_rate: int, spo2: int) -> HealthEva
         return HealthEvaluation(
             status="WARNING",
             recommendation="Rest and monitor your condition",
+        )
+    if (37.3 <= temperature <= 38.0) or (95 <= heart_rate <= 100) or (94 <= spo2 <= 95):
+        return HealthEvaluation(
+            status="OBSERVE",
+            recommendation="Recheck your vitals soon and continue observing",
         )
     return HealthEvaluation(
         status="SAFE",

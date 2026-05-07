@@ -4,8 +4,10 @@ import type { HealthStatus } from "@/lib/healthLogic";
 
 const STATUS_COLORS: Record<string, string> = {
   SAFE: "#1a8a5c",
+  OBSERVE: "#1976d2",
   WARNING: "#e6a200",
   ALERT: "#d62828",
+  CRITICAL: "#7a0015",
 };
 
 export function buildHealthPassPDF(

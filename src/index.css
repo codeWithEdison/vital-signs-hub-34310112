@@ -38,16 +38,22 @@
 
     --status-safe: 158 64% 36%;
     --status-safe-bg: 158 45% 93%;
+    --status-observe: 210 86% 44%;
+    --status-observe-bg: 210 80% 95%;
     --status-warning: 38 92% 50%;
     --status-warning-bg: 40 70% 93%;
     --status-alert: 0 72% 51%;
     --status-alert-bg: 0 55% 95%;
+    --status-critical: 345 100% 25%;
+    --status-critical-bg: 345 70% 94%;
 
     --shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.04);
     --shadow-card-hover: 0 8px 24px -4px rgb(0 0 0 / 0.08);
     --shadow-glow-safe: 0 0 20px hsl(158 64% 36% / 0.2);
+    --shadow-glow-observe: 0 0 20px hsl(210 86% 44% / 0.2);
     --shadow-glow-warning: 0 0 20px hsl(38 92% 50% / 0.2);
     --shadow-glow-alert: 0 0 20px hsl(0 72% 51% / 0.2);
+    --shadow-glow-critical: 0 0 20px hsl(345 100% 25% / 0.25);
 
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
@@ -118,8 +124,14 @@
   .glow-warning {
     box-shadow: var(--shadow-glow-warning);
   }
+  .glow-observe {
+    box-shadow: var(--shadow-glow-observe);
+  }
   .glow-alert {
     box-shadow: var(--shadow-glow-alert);
+  }
+  .glow-critical {
+    box-shadow: var(--shadow-glow-critical);
   }
 }
 

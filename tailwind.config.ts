@@ -54,10 +54,14 @@ export default {
         status: {
           safe: "hsl(var(--status-safe))",
           "safe-bg": "hsl(var(--status-safe-bg))",
+          observe: "hsl(var(--status-observe))",
+          "observe-bg": "hsl(var(--status-observe-bg))",
           warning: "hsl(var(--status-warning))",
           "warning-bg": "hsl(var(--status-warning-bg))",
           alert: "hsl(var(--status-alert))",
           "alert-bg": "hsl(var(--status-alert-bg))",
+          critical: "hsl(var(--status-critical))",
+          "critical-bg": "hsl(var(--status-critical-bg))",
         },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",

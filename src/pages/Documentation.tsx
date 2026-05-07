@@ -81,12 +81,16 @@ export default function Documentation() {
     return {
       total: records.length,
       safe: records.filter(r => r.status === "SAFE").length,
+      observe: records.filter(r => r.status === "OBSERVE").length,
       warning: records.filter(r => r.status === "WARNING").length,
       alert: records.filter(r => r.status === "ALERT").length,
+      critical: records.filter(r => r.status === "CRITICAL").length,
       classPct: {
         safe: (records.filter(r => r.status === "SAFE").length / records.length) * 100,
+        observe: (records.filter(r => r.status === "OBSERVE").length / records.length) * 100,
         warning: (records.filter(r => r.status === "WARNING").length / records.length) * 100,
         alert: (records.filter(r => r.status === "ALERT").length / records.length) * 100,
+        critical: (records.filter(r => r.status === "CRITICAL").length / records.length) * 100,
       },
       temp: { min: min(temps), max: max(temps), avg: avg(temps) },
       hr: { min: min(hrs), max: max(hrs), avg: avg(hrs) },
@@ -295,7 +299,7 @@ export default function Documentation() {
             </div>
           )}
           <p className="text-xs text-muted-foreground mt-4 leading-relaxed">
-            Note: in this dashboard, final SAFE/WARNING/ALERT decisions are threshold-based on native units (°C, bpm, %). Normalization is used for analysis comparability and model-ready preprocessing, not to replace clinical thresholds.
+            Note: in this dashboard, final SAFE/OBSERVE/WARNING/ALERT/CRITICAL decisions are threshold-based on native units (°C, bpm, %). Normalization is used for analysis comparability and model-ready preprocessing, not to replace clinical thresholds.
           </p>
         </Section>
 
@@ -330,6 +334,12 @@ export default function Documentation() {
           </p>
           <div className="space-y-3">
             <ClassCard
+              status="CRITICAL"
+              color="bg-status-critical"
+              rules={["SpO₂ < 90%", "OR Temperature ≥ 39.5°C", "OR Heart Rate ≥ 140 bpm"]}
+              action="Seek emergency care immediately"
+            />
+            <ClassCard
               status="ALERT"
               color="bg-status-alert"
               rules={["Temperature > 38.0°C", "OR SpO₂ < 94%"]}
@@ -338,25 +348,37 @@ export default function Documentation() {
             <ClassCard
               status="WARNING"
               color="bg-status-warning"
-              rules={["Heart Rate > 100 bpm", "Applied only when ALERT rule is false"]}
+              rules={["Heart Rate > 100 bpm", "Applied only when CRITICAL and ALERT rules are false"]}
               action="Rest and monitor your condition"
+            />
+            <ClassCard
+              status="OBSERVE"
+              color="bg-status-observe"
+              rules={[
+                "Temperature between 37.3°C and 38.0°C",
+                "OR Heart Rate between 95 and 100 bpm",
+                "OR SpO₂ between 94% and 95%",
+              ]}
+              action="Recheck your vitals soon and continue observing"
             />
             <ClassCard
               status="SAFE"
               color="bg-status-safe"
-              rules={["Temperature ≤ 38.0°C", "Heart Rate ≤ 100 bpm", "SpO₂ ≥ 94%"]}
+              rules={["No CRITICAL/ALERT/WARNING/OBSERVE rule triggered"]}
               action="You are in good health"
             />
           </div>
           <p className="text-xs text-muted-foreground mt-4 leading-relaxed">
-            Logical order implemented by the app is: check <span className="font-mono">ALERT</span> first, then <span className="font-mono">WARNING</span>, otherwise <span className="font-mono">SAFE</span>.
-            This prevents a high-risk low-SpO₂ case from being mislabeled as WARNING due to heart rate alone.
+            Logical order implemented by the app is: check <span className="font-mono">CRITICAL</span> first, then <span className="font-mono">ALERT</span>, then <span className="font-mono">WARNING</span>, then <span className="font-mono">OBSERVE</span>, otherwise <span className="font-mono">SAFE</span>.
+            This precedence prevents high-risk cases from being mislabeled as lower-severity categories.
           </p>
           {stats && (
             <div className="mt-4 flex gap-4 text-sm">
               <span className="text-status-safe font-semibold">SAFE: {stats.safe}</span>
+              <span className="text-status-observe font-semibold">OBSERVE: {stats.observe}</span>
               <span className="text-status-warning font-semibold">WARNING: {stats.warning}</span>
               <span className="text-status-alert font-semibold">ALERT: {stats.alert}</span>
+              <span className="text-status-critical font-semibold">CRITICAL: {stats.critical}</span>
               <span className="text-muted-foreground">Total: {stats.total}</span>
             </div>
           )}
@@ -372,7 +394,7 @@ export default function Documentation() {
               <StatBox label="Total Records" value={stats.total.toLocaleString()} />
               <StatBox label="Sensors" value="3 (2 modules)" />
               <StatBox label="Sampling" value="Real-time" />
-              <StatBox label="Classification" value="3 classes" />
+              <StatBox label="Classification" value="5 classes" />
             </div>
           )}
         </Section>
@@ -440,7 +462,7 @@ export default function Documentation() {
               <ul className="text-xs text-muted-foreground space-y-1 leading-relaxed">
                 <li>• Continuous ingestion of time-series records without missing mandatory fields.</li>
                 <li>• Physiologically plausible ranges for temperature, heart rate, and SpO₂.</li>
-                <li>• Deterministic and explainable class assignment (SAFE/WARNING/ALERT) per record.</li>
+                <li>• Deterministic and explainable class assignment (SAFE/OBSERVE/WARNING/ALERT/CRITICAL) per record.</li>
                 <li>• Real-time status consistency between stored label and threshold logic.</li>
                 <li>• Clinically meaningful recommendation text linked to each assigned class.</li>
               </ul>
@@ -459,7 +481,7 @@ export default function Documentation() {
               <h3 className="text-sm font-semibold text-foreground mb-2">10.3 Time-Series to Label Mapping</h3>
               <p className="text-xs text-muted-foreground mb-3 leading-relaxed">
                 Continuous streams are categorized record-by-record using threshold precedence:
-                <span className="font-mono"> ALERT (temp &gt; 38.0 or SpO₂ &lt; 94) → WARNING (HR &gt; 100) → SAFE</span>.
+                <span className="font-mono"> CRITICAL (SpO₂ &lt; 90 or temp ≥ 39.5 or HR ≥ 140) → ALERT (temp &gt; 38.0 or SpO₂ &lt; 94) → WARNING (HR &gt; 100) → OBSERVE (borderline ranges) → SAFE</span>.
               </p>
               {stats && (
                 <div className="overflow-x-auto">
@@ -474,22 +496,34 @@ export default function Documentation() {
                     </thead>
                     <tbody className="text-muted-foreground">
                       <tr className="border-b border-border/50">
-                        <td className="py-2 pr-4">SAFE</td>
-                        <td className="py-2 pr-4">{stats.safe}</td>
-                        <td className="py-2 pr-4">{stats.classPct.safe.toFixed(1)}%</td>
-                        <td className="py-2 pr-4">Temp ≤ 38.0, HR ≤ 100, SpO₂ ≥ 94</td>
+                        <td className="py-2 pr-4">CRITICAL</td>
+                        <td className="py-2 pr-4">{stats.critical}</td>
+                        <td className="py-2 pr-4">{stats.classPct.critical.toFixed(1)}%</td>
+                        <td className="py-2 pr-4">SpO₂ &lt; 90 or Temp ≥ 39.5 or HR ≥ 140</td>
+                      </tr>
+                      <tr className="border-b border-border/50">
+                        <td className="py-2 pr-4">ALERT</td>
+                        <td className="py-2 pr-4">{stats.alert}</td>
+                        <td className="py-2 pr-4">{stats.classPct.alert.toFixed(1)}%</td>
+                        <td className="py-2 pr-4">Temp &gt; 38.0 or SpO₂ &lt; 94 (not CRITICAL)</td>
                       </tr>
                       <tr className="border-b border-border/50">
                         <td className="py-2 pr-4">WARNING</td>
                         <td className="py-2 pr-4">{stats.warning}</td>
                         <td className="py-2 pr-4">{stats.classPct.warning.toFixed(1)}%</td>
-                        <td className="py-2 pr-4">HR &gt; 100 and not ALERT</td>
+                        <td className="py-2 pr-4">HR &gt; 100 and not CRITICAL/ALERT</td>
+                      </tr>
+                      <tr className="border-b border-border/50">
+                        <td className="py-2 pr-4">OBSERVE</td>
+                        <td className="py-2 pr-4">{stats.observe}</td>
+                        <td className="py-2 pr-4">{stats.classPct.observe.toFixed(1)}%</td>
+                        <td className="py-2 pr-4">Borderline ranges and not higher-risk class</td>
                       </tr>
                       <tr>
-                        <td className="py-2 pr-4">ALERT</td>
-                        <td className="py-2 pr-4">{stats.alert}</td>
-                        <td className="py-2 pr-4">{stats.classPct.alert.toFixed(1)}%</td>
-                        <td className="py-2 pr-4">Temp &gt; 38.0 or SpO₂ &lt; 94</td>
+                        <td className="py-2 pr-4">SAFE</td>
+                        <td className="py-2 pr-4">{stats.safe}</td>
+                        <td className="py-2 pr-4">{stats.classPct.safe.toFixed(1)}%</td>
+                        <td className="py-2 pr-4">No threshold triggered</td>
                       </tr>
                     </tbody>
                   </table>

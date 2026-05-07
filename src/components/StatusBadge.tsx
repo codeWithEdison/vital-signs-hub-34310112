@@ -1,5 +1,5 @@
 import type { HealthStatus } from "@/lib/healthLogic";
-import { ShieldCheck, AlertTriangle, AlertCircle } from "lucide-react";
+import { ShieldCheck, Eye, AlertTriangle, AlertCircle, Siren } from "lucide-react";
 
 const statusConfig = {
   SAFE: {
@@ -7,6 +7,12 @@ const statusConfig = {
     icon: ShieldCheck,
     className: "bg-status-safe-bg text-status-safe border-status-safe/25",
     glowClass: "glow-safe",
+  },
+  OBSERVE: {
+    label: "OBSERVE",
+    icon: Eye,
+    className: "bg-status-observe-bg text-status-observe border-status-observe/25",
+    glowClass: "glow-observe",
   },
   WARNING: {
     label: "WARNING",
@@ -19,6 +25,12 @@ const statusConfig = {
     icon: AlertCircle,
     className: "bg-status-alert-bg text-status-alert border-status-alert/25",
     glowClass: "glow-alert",
+  },
+  CRITICAL: {
+    label: "CRITICAL",
+    icon: Siren,
+    className: "bg-status-critical-bg text-status-critical border-status-critical/25",
+    glowClass: "glow-critical",
   },
 };
 

@@ -10,7 +10,7 @@ import pandas as pd
 
 from health_rules import evaluate_health
 
-HealthStatus = Literal["SAFE", "WARNING", "ALERT"]
+HealthStatus = Literal["SAFE", "OBSERVE", "WARNING", "ALERT", "CRITICAL"]
 
 
 def load_bundle(path: str | Path = "model_bundle.joblib") -> dict:
@@ -38,14 +38,14 @@ def predict_model_status(bundle: dict, temperature: float, heart_rate: int, spo2
 def predict_hybrid(bundle: dict, temperature: float, heart_rate: int, spo2: int) -> dict:
     """
     Safety-first decision:
-      - If explicit rule says ALERT, keep ALERT.
+      - If explicit rule says CRITICAL or ALERT, keep it.
       - Otherwise use selected ML model prediction.
     """
     rule_eval = evaluate_health(float(temperature), int(heart_rate), int(spo2))
     model_status, confidence = predict_model_status(bundle, temperature, heart_rate, spo2)
 
-    if rule_eval.status == "ALERT":
-        final_status = "ALERT"
+    if rule_eval.status in ("CRITICAL", "ALERT"):
+        final_status = rule_eval.status
         source = "rule_override"
     else:
         final_status = model_status

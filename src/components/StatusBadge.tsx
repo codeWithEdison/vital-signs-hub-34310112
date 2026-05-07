@@ -1,5 +1,5 @@
 import type { HealthStatus } from "@/lib/healthLogic";
-import { ShieldCheck, Eye, AlertTriangle, AlertCircle, Siren } from "lucide-react";
+import { ShieldCheck, Eye, AlertTriangle, AlertCircle, Siren, OctagonX } from "lucide-react";
 
 const statusConfig = {
   SAFE: {
@@ -31,6 +31,12 @@ const statusConfig = {
     icon: Siren,
     className: "bg-status-critical-bg text-status-critical border-status-critical/25",
     glowClass: "glow-critical",
+  },
+  INVALID: {
+    label: "INVALID",
+    icon: OctagonX,
+    className: "bg-status-invalid-bg text-status-invalid border-status-invalid/25",
+    glowClass: "glow-invalid",
   },
 };
 

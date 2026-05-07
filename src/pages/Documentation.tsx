@@ -81,12 +81,14 @@ export default function Documentation() {
     return {
       total: records.length,
       safe: records.filter(r => r.status === "SAFE").length,
+      invalid: records.filter(r => r.status === "INVALID").length,
       observe: records.filter(r => r.status === "OBSERVE").length,
       warning: records.filter(r => r.status === "WARNING").length,
       alert: records.filter(r => r.status === "ALERT").length,
       critical: records.filter(r => r.status === "CRITICAL").length,
       classPct: {
         safe: (records.filter(r => r.status === "SAFE").length / records.length) * 100,
+        invalid: (records.filter(r => r.status === "INVALID").length / records.length) * 100,
         observe: (records.filter(r => r.status === "OBSERVE").length / records.length) * 100,
         warning: (records.filter(r => r.status === "WARNING").length / records.length) * 100,
         alert: (records.filter(r => r.status === "ALERT").length / records.length) * 100,
@@ -299,7 +301,7 @@ export default function Documentation() {
             </div>
           )}
           <p className="text-xs text-muted-foreground mt-4 leading-relaxed">
-            Note: in this dashboard, final SAFE/OBSERVE/WARNING/ALERT/CRITICAL decisions are threshold-based on native units (°C, bpm, %). Normalization is used for analysis comparability and model-ready preprocessing, not to replace clinical thresholds.
+            Note: in this dashboard, final INVALID/SAFE/OBSERVE/WARNING/ALERT/CRITICAL decisions are threshold-based on native units (°C, bpm, %). Normalization is used for analysis comparability and model-ready preprocessing, not to replace clinical thresholds.
           </p>
         </Section>
 
@@ -333,6 +335,16 @@ export default function Documentation() {
             Each record is evaluated by deterministic rules in sequence. Rule order is important because higher-risk conditions must override lower-risk conditions.
           </p>
           <div className="space-y-3">
+            <ClassCard
+              status="INVALID"
+              color="bg-status-invalid"
+              rules={[
+                "Temperature outside 30°C–45°C",
+                "OR Heart Rate outside 30–220 bpm",
+                "OR SpO₂ outside 70%–100%",
+              ]}
+              action="Invalid sensor reading. Please retake measurement"
+            />
             <ClassCard
               status="CRITICAL"
               color="bg-status-critical"
@@ -369,11 +381,12 @@ export default function Documentation() {
             />
           </div>
           <p className="text-xs text-muted-foreground mt-4 leading-relaxed">
-            Logical order implemented by the app is: check <span className="font-mono">CRITICAL</span> first, then <span className="font-mono">ALERT</span>, then <span className="font-mono">WARNING</span>, then <span className="font-mono">OBSERVE</span>, otherwise <span className="font-mono">SAFE</span>.
+            Logical order implemented by the app is: check <span className="font-mono">INVALID</span> first, then <span className="font-mono">CRITICAL</span>, then <span className="font-mono">ALERT</span>, then <span className="font-mono">WARNING</span>, then <span className="font-mono">OBSERVE</span>, otherwise <span className="font-mono">SAFE</span>.
             This precedence prevents high-risk cases from being mislabeled as lower-severity categories.
           </p>
           {stats && (
             <div className="mt-4 flex gap-4 text-sm">
+              <span className="text-status-invalid font-semibold">INVALID: {stats.invalid}</span>
               <span className="text-status-safe font-semibold">SAFE: {stats.safe}</span>
               <span className="text-status-observe font-semibold">OBSERVE: {stats.observe}</span>
               <span className="text-status-warning font-semibold">WARNING: {stats.warning}</span>
@@ -394,7 +407,7 @@ export default function Documentation() {
               <StatBox label="Total Records" value={stats.total.toLocaleString()} />
               <StatBox label="Sensors" value="3 (2 modules)" />
               <StatBox label="Sampling" value="Real-time" />
-              <StatBox label="Classification" value="5 classes" />
+              <StatBox label="Classification" value="6 classes" />
             </div>
           )}
         </Section>
@@ -462,7 +475,7 @@ export default function Documentation() {
               <ul className="text-xs text-muted-foreground space-y-1 leading-relaxed">
                 <li>• Continuous ingestion of time-series records without missing mandatory fields.</li>
                 <li>• Physiologically plausible ranges for temperature, heart rate, and SpO₂.</li>
-                <li>• Deterministic and explainable class assignment (SAFE/OBSERVE/WARNING/ALERT/CRITICAL) per record.</li>
+                <li>• Deterministic and explainable class assignment (INVALID/SAFE/OBSERVE/WARNING/ALERT/CRITICAL) per record.</li>
                 <li>• Real-time status consistency between stored label and threshold logic.</li>
                 <li>• Clinically meaningful recommendation text linked to each assigned class.</li>
               </ul>
@@ -481,7 +494,7 @@ export default function Documentation() {
               <h3 className="text-sm font-semibold text-foreground mb-2">10.3 Time-Series to Label Mapping</h3>
               <p className="text-xs text-muted-foreground mb-3 leading-relaxed">
                 Continuous streams are categorized record-by-record using threshold precedence:
-                <span className="font-mono"> CRITICAL (SpO₂ &lt; 90 or temp ≥ 39.5 or HR ≥ 140) → ALERT (temp &gt; 38.0 or SpO₂ &lt; 94) → WARNING (HR &gt; 100) → OBSERVE (borderline ranges) → SAFE</span>.
+                <span className="font-mono"> INVALID (physiologically impossible values) → CRITICAL (SpO₂ &lt; 90 or temp ≥ 39.5 or HR ≥ 140) → ALERT (temp &gt; 38.0 or SpO₂ &lt; 94) → WARNING (HR &gt; 100) → OBSERVE (borderline ranges) → SAFE</span>.
               </p>
               {stats && (
                 <div className="overflow-x-auto">
@@ -495,6 +508,12 @@ export default function Documentation() {
                       </tr>
                     </thead>
                     <tbody className="text-muted-foreground">
+                      <tr className="border-b border-border/50">
+                        <td className="py-2 pr-4">INVALID</td>
+                        <td className="py-2 pr-4">{stats.invalid}</td>
+                        <td className="py-2 pr-4">{stats.classPct.invalid.toFixed(1)}%</td>
+                        <td className="py-2 pr-4">Values outside valid physiological/device range</td>
+                      </tr>
                       <tr className="border-b border-border/50">
                         <td className="py-2 pr-4">CRITICAL</td>
                         <td className="py-2 pr-4">{stats.critical}</td>

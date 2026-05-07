@@ -32,6 +32,7 @@ from sample_data import ensure_sample_csv
 def decision_table_text() -> str:
     return """
 Business rules (same as app healthLogic):
+  IF temperature<30 OR temperature>45 OR heart_rate<30 OR heart_rate>220 OR spo2<70 OR spo2>100 -> INVALID -> Retake measurement
   IF spo2 < 90 OR temperature >= 39.5 OR heart_rate >= 140 -> CRITICAL -> Seek emergency care immediately
   ELIF temperature > 38.0 OR spo2 < 94                     -> ALERT    -> Visit the clinic immediately
   ELIF heart_rate > 100                                    -> WARNING  -> Rest and monitor your condition

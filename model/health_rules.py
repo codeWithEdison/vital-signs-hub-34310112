@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-HealthStatus = Literal["SAFE", "OBSERVE", "WARNING", "ALERT", "CRITICAL"]
+HealthStatus = Literal["SAFE", "OBSERVE", "WARNING", "ALERT", "CRITICAL", "INVALID"]
 
 
 @dataclass(frozen=True)
@@ -15,6 +15,20 @@ class HealthEvaluation:
 
 
 def evaluate_health(temperature: float, heart_rate: int, spo2: int) -> HealthEvaluation:
+    invalid_reading = (
+        temperature < 30.0
+        or temperature > 45.0
+        or heart_rate < 30
+        or heart_rate > 220
+        or spo2 < 70
+        or spo2 > 100
+    )
+    if invalid_reading:
+        return HealthEvaluation(
+            status="INVALID",
+            recommendation="Invalid sensor reading. Please retake measurement",
+        )
+
     if spo2 < 90 or temperature >= 39.5 or heart_rate >= 140:
         return HealthEvaluation(
             status="CRITICAL",

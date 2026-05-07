@@ -8,6 +8,7 @@ const STATUS_COLORS: Record<string, string> = {
   WARNING: "#e6a200",
   ALERT: "#d62828",
   CRITICAL: "#7a0015",
+  INVALID: "#5a5562",
 };
 
 export function buildHealthPassPDF(

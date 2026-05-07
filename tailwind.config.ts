@@ -62,6 +62,8 @@ export default {
           "alert-bg": "hsl(var(--status-alert-bg))",
           critical: "hsl(var(--status-critical))",
           "critical-bg": "hsl(var(--status-critical-bg))",
+          invalid: "hsl(var(--status-invalid))",
+          "invalid-bg": "hsl(var(--status-invalid-bg))",
         },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",

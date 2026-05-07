@@ -1,5 +1,5 @@
 /** Evaluate health status based on vitals */
-export type HealthStatus = "SAFE" | "OBSERVE" | "WARNING" | "ALERT" | "CRITICAL";
+export type HealthStatus = "SAFE" | "OBSERVE" | "WARNING" | "ALERT" | "CRITICAL" | "INVALID";
 
 export interface VitalReading {
   temperature: number;
@@ -13,6 +13,24 @@ export interface HealthEvaluation {
 }
 
 export function evaluateHealth(vitals: VitalReading): HealthEvaluation {
+  const invalidReading =
+    !Number.isFinite(vitals.temperature) ||
+    !Number.isFinite(vitals.heart_rate) ||
+    !Number.isFinite(vitals.spo2) ||
+    vitals.temperature < 30 ||
+    vitals.temperature > 45 ||
+    vitals.heart_rate < 30 ||
+    vitals.heart_rate > 220 ||
+    vitals.spo2 < 70 ||
+    vitals.spo2 > 100;
+
+  if (invalidReading) {
+    return {
+      status: "INVALID",
+      recommendation: "Invalid sensor reading. Please retake measurement",
+    };
+  }
+
   if (vitals.spo2 < 90 || vitals.temperature >= 39.5 || vitals.heart_rate >= 140) {
     return {
       status: "CRITICAL",

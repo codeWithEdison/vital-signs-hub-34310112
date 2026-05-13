@@ -20,7 +20,7 @@ def _load_local_server_env() -> None:
     """Load key=value pairs from model/.env.server if present."""
     if not _SERVER_ENV_FILE.exists():
         return
-    for raw_line in _SERVER_ENV_FILE.read_text(encoding="utf-8").splitlines():
+    for raw_line in _SERVER_ENV_FILE.read_text(encoding="utf-8-sig").splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
@@ -48,14 +48,29 @@ def _build_supabase() -> Client:
     url = os.getenv("SUPABASE_URL")
     service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
     if not url or not service_key:
-        raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set")
+        raise RuntimeError(
+            "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set. "
+            f"Create {_SERVER_ENV_FILE} (see .env.server.example) or export them in your shell."
+        )
+    if service_key.startswith("REPLACE_") or "YOUR_SERVICE_ROLE" in service_key:
+        raise RuntimeError(
+            "SUPABASE_SERVICE_ROLE_KEY is still a placeholder. "
+            f"Paste your real service role key in {_SERVER_ENV_FILE} (Supabase Dashboard → Settings → API)."
+        )
     return create_client(url, service_key)
 
 
 app = FastAPI(title="Vitals Prediction API", version="1.0.0")
 _bundle: dict[str, Any] | None = None
 _bundle_error: str | None = None
-_supabase = _build_supabase()
+_supabase: Client | None = None
+
+
+def _get_supabase() -> Client:
+    global _supabase
+    if _supabase is None:
+        _supabase = _build_supabase()
+    return _supabase
 
 
 def _ensure_bundle_loaded() -> dict[str, Any]:
@@ -77,11 +92,29 @@ def _ensure_bundle_loaded() -> dict[str, Any]:
         ) from exc
 
 
+def _supabase_env_ok() -> bool:
+    url = os.getenv("SUPABASE_URL")
+    key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    if not url or not key:
+        return False
+    if key.startswith("REPLACE_") or "YOUR_SERVICE_ROLE" in key:
+        return False
+    return True
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
+    out: dict[str, str] = {}
     if _bundle_error:
-        return {"status": "degraded", "bundle": "error"}
-    return {"status": "ok", "bundle": "ready"}
+        out["status"] = "degraded"
+        out["bundle"] = "error"
+    else:
+        out["status"] = "ok"
+        out["bundle"] = "ready"
+    out["supabase"] = "configured" if _supabase_env_ok() else "missing_or_placeholder"
+    if out["supabase"] != "configured":
+        out["supabase_file"] = str(_SERVER_ENV_FILE)
+    return out
 
 
 @app.post("/predict")
@@ -114,10 +147,15 @@ def predict_and_persist(payload: PredictAndPersistRequest) -> dict[str, Any]:
         # Keep current dashboard compatibility by mirroring final decision to status.
         "status": result["final_status"],
         "model_updated_at": datetime.now(timezone.utc).isoformat(),
-    }
+    } 
+
+    try:
+        sb = _get_supabase()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     response = (
-        _supabase.table("vitals")
+        sb.table("vitals")
         .update(update_payload)
         .eq("id", payload.vital_id)
         .execute()

@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
-import { ArrowLeft, Cpu, Activity, Thermometer, Heart, Wind } from "lucide-react";
+import { ArrowLeft, Cpu, Activity, Thermometer, Heart, Wind, FileDown } from "lucide-react";
 import logo from "@/assets/logo.png";
+import { Button } from "@/components/ui/button";
 import { useVitals } from "@/hooks/useVitals";
 import { useMemo } from "react";
 import { evaluateHealth, type HealthStatus } from "@/lib/healthLogic";
@@ -114,21 +115,34 @@ export default function Documentation() {
   }, [records]);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background print:bg-white print:text-foreground">
       {/* Navbar */}
-      <nav className="sticky top-0 z-50 bg-card/80 backdrop-blur-md border-b border-border">
+      <nav className="sticky top-0 z-50 bg-card/80 backdrop-blur-md border-b border-border print:hidden">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <img src={logo} alt="Logo" className="h-9 w-auto" />
             <span className="font-display font-bold text-foreground">Sick-Bay Kiosk</span>
           </div>
-          <Link to="/" className="flex items-center gap-1.5 text-xs text-primary hover:underline">
-            <ArrowLeft className="w-3.5 h-3.5" /> Dashboard
-          </Link>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 text-xs"
+              onClick={() => window.print()}
+            >
+              <FileDown className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Save as PDF</span>
+              <span className="sm:hidden">PDF</span>
+            </Button>
+            <Link to="/" className="flex items-center gap-1.5 text-xs text-primary hover:underline">
+              <ArrowLeft className="w-3.5 h-3.5" /> Dashboard
+            </Link>
+          </div>
         </div>
       </nav>
 
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-8">
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-8 print:py-6 print:px-6">
         <header className="animate-slide-up">
           <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.2em] mb-1">
             University of Rwanda · IoT Project
@@ -138,6 +152,9 @@ export default function Documentation() {
           </h1>
           <p className="mt-2 text-sm text-muted-foreground max-w-2xl">
             End-to-end technical documentation for how raw signals become clinical indicators, including sensor capture format, translation logic, formula rationale, calibration assumptions, and threshold-based status evaluation.
+          </p>
+          <p className="mt-3 hidden print:block text-xs text-muted-foreground">
+            Generated PDF: use your browser print dialog and select &quot;Save as PDF&quot; (or Microsoft Print to PDF).
           </p>
         </header>
 
@@ -629,7 +646,7 @@ export default function Documentation() {
         </Section>
       </main>
 
-      <footer className="border-t border-border bg-card/50 mt-8">
+      <footer className="border-t border-border bg-card/50 mt-8 print:hidden">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 text-center text-[11px] text-muted-foreground">
           © 2026 Contactless Sick-Bay — University of Rwanda · IoT Project
         </div>
@@ -642,7 +659,7 @@ export default function Documentation() {
 
 function Section({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
   return (
-    <section className="bg-card rounded-2xl border border-border shadow-card p-5 sm:p-6 animate-slide-up">
+    <section className="bg-card rounded-2xl border border-border shadow-card p-5 sm:p-6 animate-slide-up print:shadow-none print:break-inside-avoid print:bg-white">
       <div className="flex items-center gap-2 mb-4">
         <div className="w-8 h-8 rounded-lg bg-accent grid place-items-center text-accent-foreground">{icon}</div>
         <h2 className="font-display font-semibold text-foreground">{title}</h2>

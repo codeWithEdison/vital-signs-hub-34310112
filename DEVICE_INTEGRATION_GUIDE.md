@@ -475,6 +475,48 @@ else console.log("Reading sent!");
 
 ---
 
+## Server-Side Model Inference (Option A)
+
+Arduino flow remains unchanged. The model pipeline runs **after insert** using a Python API.
+
+### 1) Apply database migration
+
+Run the new migration so `vitals` has:
+- `model_status`
+- `final_status`
+- `model_confidence`
+- `decision_source`
+- `model_updated_at`
+
+### 2) Start Python model API
+
+```bash
+cd model
+pip install -r requirements.txt
+uvicorn api_server:app --host 0.0.0.0 --port 8000 --reload
+```
+
+Required environment variables:
+
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+
+### 3) Point web app to model API
+
+Create/update `.env` in project root:
+
+```bash
+VITE_MODEL_API_URL=http://localhost:8000
+```
+
+When a new `vitals` row is inserted, the web client calls:
+
+- `POST /predict-and-persist`
+
+The API writes model output to DB and mirrors `final_status` into `status` for UI compatibility.
+
+---
+
 ## Security Notes
 
 - The **anon key** is a publishable key — safe to embed in firmware.

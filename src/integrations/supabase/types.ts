@@ -17,8 +17,13 @@ export type Database = {
       vitals: {
         Row: {
           created_at: string
+          decision_source: string | null
+          final_status: string | null
           heart_rate: number
           id: string
+          model_confidence: number | null
+          model_status: string | null
+          model_updated_at: string | null
           recommendation: string
           spo2: number
           status: string
@@ -26,8 +31,13 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          decision_source?: string | null
+          final_status?: string | null
           heart_rate: number
           id?: string
+          model_confidence?: number | null
+          model_status?: string | null
+          model_updated_at?: string | null
           recommendation?: string
           spo2: number
           status?: string
@@ -35,8 +45,13 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          decision_source?: string | null
+          final_status?: string | null
           heart_rate?: number
           id?: string
+          model_confidence?: number | null
+          model_status?: string | null
+          model_updated_at?: string | null
           recommendation?: string
           spo2?: number
           status?: string

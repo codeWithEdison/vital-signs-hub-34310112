@@ -129,7 +129,7 @@ const Dashboard = () => {
               {/* Health Pass (left) */}
               <div className="lg:col-span-2">
                 <HealthPassCard
-                  status={latest.status as HealthStatus}
+                  status={(latest.final_status ?? latest.status) as HealthStatus}
                   recommendation={latest.recommendation}
                   temperature={latest.temperature}
                   heartRate={latest.heart_rate}

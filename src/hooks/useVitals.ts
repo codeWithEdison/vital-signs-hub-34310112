@@ -7,12 +7,18 @@ interface VitalRecord {
   heart_rate: number;
   spo2: number;
   status: string;
+  final_status?: string | null;
+  model_status?: string | null;
+  model_confidence?: number | null;
+  decision_source?: string | null;
+  model_updated_at?: string | null;
   recommendation: string;
   created_at: string;
 }
 
 const PAGE_SIZE = 20;
 const DEFAULT_CHART_MAX_TRENDS = 1000;
+const MODEL_API_URL = (import.meta.env.VITE_MODEL_API_URL as string | undefined)?.trim();
 
 export function useVitals() {
   const [records, setRecords] = useState<VitalRecord[]>([]);
@@ -89,13 +95,38 @@ export function useVitals() {
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "vitals" },
         (payload) => {
+          const inserted = payload.new as VitalRecord;
           setTotalCount((c) => c + 1);
           if (page === 1) {
-            setRecords((prev) => [payload.new as VitalRecord, ...prev].slice(0, PAGE_SIZE));
+            setRecords((prev) => [inserted, ...prev].slice(0, PAGE_SIZE));
           }
           if (!chartDateRange.from && !chartDateRange.to) {
-            setChartRecords((prev) => [payload.new as VitalRecord, ...prev].slice(0, chartTrendLimit));
+            setChartRecords((prev) => [inserted, ...prev].slice(0, chartTrendLimit));
           }
+
+          if (MODEL_API_URL) {
+            void fetch(`${MODEL_API_URL.replace(/\/$/, "")}/predict-and-persist`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                vital_id: inserted.id,
+                temperature: inserted.temperature,
+                heart_rate: inserted.heart_rate,
+                spo2: inserted.spo2,
+              }),
+            }).catch((error) => {
+              console.error("Model API request failed:", error);
+            });
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "vitals" },
+        (payload) => {
+          const updated = payload.new as VitalRecord;
+          setRecords((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+          setChartRecords((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
         }
       )
       .subscribe();

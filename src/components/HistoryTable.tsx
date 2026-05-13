@@ -13,6 +13,7 @@ interface VitalRecord {
   heart_rate: number;
   spo2: number;
   status: string;
+  final_status?: string | null;
   recommendation: string;
   created_at: string;
 }
@@ -164,7 +165,7 @@ export function HistoryTable({ records, page, totalPages, totalCount, onPageChan
                   {record.spo2}%
                 </td>
                 <td className="py-3 px-5">
-                  <StatusBadge status={record.status as HealthStatus} />
+                  <StatusBadge status={(record.final_status ?? record.status) as HealthStatus} />
                 </td>
               </tr>
             ))}

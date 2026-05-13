@@ -1,4 +1,22 @@
-"""FastAPI endpoint for model inference and Supabase persistence."""
+"""FastAPI endpoint for model inference and Supabase persistence.
+
+Environment (Supabase admin client):
+- Primary: ``SUPABASE_URL`` and ``SUPABASE_SERVICE_ROLE_KEY`` on the **process**
+  environment (Docker, systemd, Railway, Render, Fly, etc.). These always win over
+  any file.
+- Optional local dev: ``model/.env.server`` is read only for keys **not** already
+  set in the environment (same names as Supabase Edge Functions / dashboard API
+  settings).
+
+Lovable Cloud **Secrets** are injected into Lovable-managed backends (for example
+Edge Functions), not into a Python ``uvicorn`` process on your laptop. To avoid a
+local file entirely: deploy this API somewhere that supports env vars and set the
+two variables there, or move the persist step into a Lovable / Supabase Edge
+Function and keep using the same secret names there.
+
+Set ``SKIP_ENV_SERVER_FILE=1`` (or ``true``) to ignore ``.env.server`` completely
+(e.g. production containers).
+"""
 
 from __future__ import annotations
 
@@ -16,8 +34,14 @@ from predict_final import load_bundle, predict_hybrid
 _SERVER_ENV_FILE = Path(__file__).resolve().parent / ".env.server"
 
 
+def _truthy_env(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in ("1", "true", "yes", "on")
+
+
 def _load_local_server_env() -> None:
-    """Load key=value pairs from model/.env.server if present."""
+    """Load key=value pairs from model/.env.server if present (fills gaps only)."""
+    if _truthy_env("SKIP_ENV_SERVER_FILE"):
+        return
     if not _SERVER_ENV_FILE.exists():
         return
     for raw_line in _SERVER_ENV_FILE.read_text(encoding="utf-8-sig").splitlines():
@@ -27,7 +51,7 @@ def _load_local_server_env() -> None:
         key, value = line.split("=", 1)
         key = key.strip()
         value = value.strip().strip('"').strip("'")
-        # Do not override already-exported env vars from the shell.
+        # Do not override already-exported env vars (cloud / CI / shell).
         os.environ.setdefault(key, value)
 
 
@@ -49,8 +73,9 @@ def _build_supabase() -> Client:
     service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
     if not url or not service_key:
         raise RuntimeError(
-            "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set. "
-            f"Create {_SERVER_ENV_FILE} (see .env.server.example) or export them in your shell."
+            "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set in the process "
+            "environment (recommended for cloud) or in model/.env.server for local "
+            f"dev. See .env.server.example. File path: {_SERVER_ENV_FILE}"
         )
     if service_key.startswith("REPLACE_") or "YOUR_SERVICE_ROLE" in service_key:
         raise RuntimeError(
@@ -113,7 +138,13 @@ def health() -> dict[str, str]:
         out["bundle"] = "ready"
     out["supabase"] = "configured" if _supabase_env_ok() else "missing_or_placeholder"
     if out["supabase"] != "configured":
-        out["supabase_file"] = str(_SERVER_ENV_FILE)
+        out["supabase_hint"] = (
+            "Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY on the host (same names "
+            "as Supabase Edge Functions), or use model/.env.server locally unless "
+            "SKIP_ENV_SERVER_FILE=1."
+        )
+        if not _truthy_env("SKIP_ENV_SERVER_FILE"):
+            out["supabase_file"] = str(_SERVER_ENV_FILE)
     return out
 
 

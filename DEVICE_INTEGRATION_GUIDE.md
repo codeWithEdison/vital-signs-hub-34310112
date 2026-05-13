@@ -477,7 +477,11 @@ else console.log("Reading sent!");
 
 ## Server-Side Model Inference (Option A)
 
-Arduino flow remains unchanged. The model pipeline runs **after insert** using a Python API.
+Arduino flow remains unchanged. After each `vitals` **insert**, the dashboard runs hybrid rule + logistic regression and writes results back to the row.
+
+**Default (recommended for Lovable / Supabase):** a **Supabase Edge Function** named `predict-and-persist` runs on Deno, uses `SUPABASE_SERVICE_ROLE_KEY` from function secrets (never in the browser), and embeds weights from `supabase/functions/predict-and-persist/model_inference.json` (regenerate with `python model/rebuild_bundle.py` or `python model/rebuild_bundle.py --export-json-only` after retraining).
+
+**Optional:** run the Python `model/api_server.py` locally or on any host and set `VITE_MODEL_API_URL` in the project root `.env`; when that variable is set, the app calls the external API instead of the Edge Function.
 
 ### 1) Apply database migration
 
@@ -488,7 +492,19 @@ Run the new migration so `vitals` has:
 - `decision_source`
 - `model_updated_at`
 
-### 2) Start Python model API
+### 2a) Deploy Edge Function (default path)
+
+From the repo root (with [Supabase CLI](https://supabase.com/docs/guides/cli) linked to your project):
+
+```bash
+supabase functions deploy predict-and-persist
+```
+
+`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are available automatically inside the function. Ensure `model_inference.json` is present next to `index.ts` (commit it after training).
+
+In the project root `.env`, **omit** `VITE_MODEL_API_URL` (or remove it) so the client uses `supabase.functions.invoke("predict-and-persist", …)`.
+
+### 2b) Optional: local Python API instead
 
 ```bash
 cd model
@@ -496,24 +512,24 @@ pip install -r requirements.txt
 uvicorn api_server:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Required environment variables:
-
-- `SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
-
-### 3) Point web app to model API
-
-Create/update `.env` in project root:
+Set in project root `.env`:
 
 ```bash
 VITE_MODEL_API_URL=http://localhost:8000
 ```
 
-When a new `vitals` row is inserted, the web client calls:
+Required environment variables for Python only (same names as [Supabase Edge Function secrets](https://supabase.com/docs/guides/functions/secrets); set them on **whatever runs** `uvicorn`, not only in Lovable’s frontend `.env`):
 
-- `POST /predict-and-persist`
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
 
-The API writes model output to DB and mirrors `final_status` into `status` for UI compatibility.
+**Local file (optional):** `model/.env.server` can supply these only for keys not already set in the process environment. **Process environment always wins.** For production or any hosted API, set the two variables in the host’s secret store and optionally set `SKIP_ENV_SERVER_FILE=1` so the server never reads a file.
+
+**Lovable Cloud:** project Secrets are injected into Lovable-managed backends (for example Edge Functions), not into a Python server you start on your own machine. Prefer the Supabase Edge Function above, or deploy the FastAPI app to a host that supports environment variables and set `VITE_MODEL_API_URL` to that URL.
+
+### 3) After insert
+
+When a new `vitals` row is inserted, the web client either invokes the Edge Function or `POST`s to the external model URL. The handler writes model output to DB and mirrors `final_status` into `status` for UI compatibility.
 
 ---
 

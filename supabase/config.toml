@@ -1,1 +1,4 @@
 project_id = "jyzzceseztsujhlvzzpv"
+
+[functions.predict-and-persist]
+verify_jwt = true

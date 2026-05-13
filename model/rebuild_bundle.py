@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import joblib
+import numpy as np
 import pandas as pd
 
 from health_rules import rule_status_series
@@ -69,6 +71,38 @@ def main() -> None:
     print(f"Source: {data_path.name}")
     print(f"Accuracy: {payload['meta']['accuracy']:.4f}")
 
+    export_inference_json(root, payload)
+
+
+def export_inference_json(root: Path, payload: dict) -> Path:
+    """Dump scaler + logistic weights for Supabase Edge (Deno) inference."""
+    pipe = payload["model"]
+    le = payload["label_encoder"]
+    prep = pipe.named_steps["prep"]
+    clf = pipe.named_steps["clf"]
+    scale = prep.named_transformers_["scale"]
+    data = {
+        "classes": [str(c) for c in le.classes_],
+        "feature_names": ["temperature", "heart_rate", "spo2"],
+        "scaler_mean": np.asarray(scale.mean_, dtype=float).tolist(),
+        "scaler_scale": np.asarray(scale.scale_, dtype=float).tolist(),
+        "coef": np.asarray(clf.coef_, dtype=float).tolist(),
+        "intercept": np.asarray(clf.intercept_, dtype=float).tolist(),
+    }
+    fn_dir = root.parent / "supabase" / "functions" / "predict-and-persist"
+    fn_dir.mkdir(parents=True, exist_ok=True)
+    out_json = fn_dir / "model_inference.json"
+    out_json.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    print(f"Exported Edge weights: {out_json}")
+    return out_json
+
 
 if __name__ == "__main__":
-    main()
+    import sys
+
+    root = Path(__file__).resolve().parent
+    if len(sys.argv) > 1 and sys.argv[1] == "--export-json-only":
+        bundle = joblib.load(root / "model_bundle.joblib")
+        export_inference_json(root, bundle)
+    else:
+        main()

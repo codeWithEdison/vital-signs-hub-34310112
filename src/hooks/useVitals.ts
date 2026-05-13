@@ -18,6 +18,7 @@ interface VitalRecord {
 
 const PAGE_SIZE = 20;
 const DEFAULT_CHART_MAX_TRENDS = 1000;
+/** Optional external Python API; if unset, uses Supabase Edge Function `predict-and-persist`. */
 const MODEL_API_URL = (import.meta.env.VITE_MODEL_API_URL as string | undefined)?.trim();
 
 export function useVitals() {
@@ -104,19 +105,26 @@ export function useVitals() {
             setChartRecords((prev) => [inserted, ...prev].slice(0, chartTrendLimit));
           }
 
+          const persistBody = {
+            vital_id: inserted.id,
+            temperature: inserted.temperature,
+            heart_rate: inserted.heart_rate,
+            spo2: inserted.spo2,
+          };
           if (MODEL_API_URL) {
             void fetch(`${MODEL_API_URL.replace(/\/$/, "")}/predict-and-persist`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                vital_id: inserted.id,
-                temperature: inserted.temperature,
-                heart_rate: inserted.heart_rate,
-                spo2: inserted.spo2,
-              }),
+              body: JSON.stringify(persistBody),
             }).catch((error) => {
               console.error("Model API request failed:", error);
             });
+          } else {
+            void supabase.functions
+              .invoke("predict-and-persist", { body: persistBody })
+              .then(({ error }) => {
+                if (error) console.error("predict-and-persist Edge Function failed:", error);
+              });
           }
         }
       )
